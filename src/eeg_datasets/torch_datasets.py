@@ -6,22 +6,22 @@ import numpy as np
 
 # Create a simple torch dataset
 class MIBCI_SimpleDataset(torch.utils.data.Dataset):
-    def __init__(self, X, y, classification = True):
+    def __init__(self, X, y, classification = True, device = 'cpu'):
         # Check if X is a tensor or numpy array
         if isinstance(X,np.ndarray):
-            self.X = torch.tensor(X, dtype=torch.float)
+            self.X = torch.tensor(X, dtype=torch.float).to(device)
         else:
             self.X = X
         if isinstance(y,np.ndarray):
             if classification:
-                self.y = torch.tensor(y, dtype=torch.long)
+                self.y = torch.tensor(y, dtype=torch.long).to(device)
             else:
-                self.y = torch.tensor(y, dtype=torch.float)
+                self.y = torch.tensor(y, dtype=torch.float).to(device)
         else:
             if classification:
-                self.y = y.long()
+                self.y = y.long().to(device)
             else:
-                self.y = y.float()
+                self.y = y.float().to(device)
         self.n = X.shape[0]
 
     def __getitem__(self, idx):

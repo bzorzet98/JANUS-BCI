@@ -75,7 +75,7 @@ class WithinUnitHoldoutSchema:
 
     def generate_folds(self, **context) -> List[Fold]:
         unit_id = context["unit_id"]
-        X, y, metadata = self.provider.get_unit(unit_id)
+        X, y = self.provider.get_unit(unit_id)
         n = len(y)
 
         train_idx_intermediate, test_idx = self.split_strategy.split_indices(n_total=n, ntest=int(self.ptest * n), y=y)
@@ -90,9 +90,6 @@ class WithinUnitHoldoutSchema:
         X_train, y_train = X[train_idx], y[train_idx]
         X_val, y_val = X[val_idx], y[val_idx]
         X_test, y_test = X[test_idx], y[test_idx]
-        meta_train = metadata.iloc[train_idx] if metadata is not None else None
-        meta_val = metadata.iloc[val_idx] if metadata is not None else None
-        meta_test = metadata.iloc[test_idx] if metadata is not None else None
 
         y_train_t, y_val_t, y_test_t, label_meta = self.label_transform.transform(y_train, y_val, y_test)
 
@@ -103,11 +100,11 @@ class WithinUnitHoldoutSchema:
             metadata={
                 "unit_id": unit_id,
                 "dataloader_seed": self.dataloader_seed,
+                "n_train": len(train_idx), "n_val": len(val_idx), "n_test": len(test_idx),
                 "train_idx": [int(i) for i in train_idx],
                 "val_idx": [int(i) for i in val_idx],
                 "test_idx": [int(i) for i in test_idx],
                 **label_meta,
-                "metadata_train": meta_train, "metadata_val": meta_val, "metadata_test": meta_test,
             },
         )]
 
@@ -154,7 +151,7 @@ class WithinUnitKFoldSchema:
     def generate_folds(self, **context) -> List[Fold]:
         """context esperado: unit_id."""
         unit_id = context["unit_id"]
-        X, y, metadata = self.provider.get_unit(unit_id)
+        X, y = self.provider.get_unit(unit_id)
 
         all_idx = np.arange(len(y))
         test_splitter = StratifiedShuffleSplit(n_splits=1, test_size=self.ptest, random_state=self.seed)
@@ -164,7 +161,6 @@ class WithinUnitKFoldSchema:
         kfold = StratifiedKFold(n_splits=self.k_folds, shuffle=True, random_state=self.seed)
 
         X_test, y_test = X[test_idx], y[test_idx]
-        meta_test = metadata.iloc[test_idx] if metadata is not None else None
 
         folds = []
         for fold_idx, (train_relative, val_relative) in enumerate(kfold.split(train_val_idx, y_train_val)):
@@ -173,8 +169,6 @@ class WithinUnitKFoldSchema:
 
             X_train, y_train = X[train_idx], y[train_idx]
             X_val, y_val = X[val_idx], y[val_idx]
-            meta_train = metadata.iloc[train_idx] if metadata is not None else None
-            meta_val = metadata.iloc[val_idx] if metadata is not None else None
 
             y_train_t, y_val_t, y_test_t, label_meta = self.label_transform.transform(y_train, y_val, y_test)
 
@@ -185,11 +179,11 @@ class WithinUnitKFoldSchema:
                 metadata={
                     "unit_id": unit_id, "fold_idx": fold_idx, "k_folds": self.k_folds,
                     "dataloader_seed": self.seed * 1000 + fold_idx,
+                    "n_train": len(train_idx), "n_val": len(val_idx), "n_test": len(test_idx),
                     "train_idx": [int(i) for i in train_idx],
                     "val_idx": [int(i) for i in val_idx],
                     "test_idx": [int(i) for i in test_idx],
-                    **label_meta,
-                    "metadata_train": meta_train, "metadata_val": meta_val, "metadata_test": meta_test,
+                    **label_meta
                 },
             ))
         return folds
@@ -254,12 +248,12 @@ class LeaveOneUnitOutSchema:
             val_units = []
         train_units = [u for u in remaining if u not in val_units]
 
-        X_train, y_train, meta_train = self.provider.get_units(train_units)
+        X_train, y_train = self.provider.get_units(train_units)
         if val_units:
-            X_val, y_val, meta_val = self.provider.get_units(val_units)
+            X_val, y_val = self.provider.get_units(val_units)
         else:
-            X_val, y_val, meta_val = None, None, None
-        X_test, y_test, meta_test = self.provider.get_unit(unit_id)
+            X_val, y_val = None, None
+        X_test, y_test = self.provider.get_unit(unit_id)
 
         y_train_t, y_val_t, y_test_t, label_meta = self.label_transform.transform(y_train, y_val, y_test)
 
@@ -268,12 +262,13 @@ class LeaveOneUnitOutSchema:
             X_val=X_val, y_val=y_val_t,
             X_test=X_test, y_test=y_test_t,
             metadata={
+                "n_train_units": len(train_units), "n_val_units": len(val_units), "n_test_units": 1,
+                "n_train": len(y_train), "n_val": len(y_val) if y_val is not None else 0, "n_test": len(y_test),
                 "test_unit": unit_id,
                 "train_units": train_units,
                 "val_units": val_units,
                 "dataloader_seed": self.dataloader_seed,
                 **label_meta,
-                "metadata_train": meta_train, "metadata_val": meta_val, "metadata_test": meta_test,
             },
         )]
 

@@ -1,7 +1,4 @@
 {
-    // Use IntelliSense para saber los atributos posibles.
-    // Mantenga el puntero para ver las descripciones de los existentes atributos.
-    // Para más información, visite: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
@@ -14,28 +11,58 @@
             "env": { "PYTHONPATH": "${workspaceFolder}" }
         },
         {
-            "name": "run_production.py (elegir config)",
+            "name": "run_preprocessing.py (elegir config)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/scripts/run_production.py",
+            "program": "${workspaceFolder}/scripts/run_preprocessing.py",
             "args": ["--config", "${input:configPath}"],
             "console": "integratedTerminal",
             "justMyCode": true,
-            "cwd": "${workspaceFolder}",
-            "env": {
-                "JANUS_REPO_ROOT": "/workspace",
-                "JANUS_DATA_ROOT": "/data",
-                "JANUS_RESULTS_ROOT": "/results",
-                "JANUS_SANDBOX_ROOT": "/sandbox"
-            }
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "run_training.py (elegir config)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run_training.py",
+            "args": ["--config", "${input:configPath}"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "run_testing.py (elegir config)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run_testing.py",
+            "args": ["--config", "${input:configPath}"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "run_hp_search.py (elegir configs)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/run_hp_search.py",
+            "args": ["--hp_search_config", "${input:hpSearchConfigPath}", "--base_config", "${input:configPath}"],
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}"
         }
     ],
     "inputs": [
         {
             "id": "configPath",
             "type": "promptString",
-            "description": "Path al JSON (relativo al repo)",
-            "default": "temp/Cho2017_s1_CAR-preproc.json"
+            "description": "Path al JSON de config (relativo o absoluto)",
+            "default": "projects/test-repo/configs/training/WS-Holdout/EEGNetv4/Cho2017-s1_simple-CAR-128Hz-preproc_smoke-test.json"
+        },
+        {
+            "id": "hpSearchConfigPath",
+            "type": "promptString",
+            "description": "Path al JSON de hp_search_config (grid/dev_units/fixed_overrides)",
+            "default": "projects/test-repo/configs/hp_search/example_hp_search.json"
         }
     ]
 }

@@ -42,3 +42,4 @@ dependencies:
       - mne-icalabel==0.8.1
       - pyriemann==0.7
       - rich==13.9.4
+      - einops==0.8.2

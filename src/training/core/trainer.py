@@ -1,26 +1,36 @@
 """
-`Trainer_DL` refactorizado: compone un `CallbackDispatcher` en vez de
-implementar su propio sistema de eventos (repo_viejo/src/torch_utils/trainer.py
-mezclaba loop de entrenamiento + gestión de callbacks + políticas de
-default). `train()`/`evaluate()`/`infer()`/`model_infer()` se mantienen
-funcionalmente idénticos al original.
+`Trainer_DL` -- ver docstring original para el resto del diseño (compone
+CallbackDispatcher, loss_strategy/gradient_clipper opcionales, history
+delegado al dispatcher).
 
-`self.history` sigue viviendo acá (no se traslada al dispatcher): los
-callbacks existentes (`src/torch_utils/callbacks.py`) leen/escriben
-`trainer.history` directamente -- moverlo hubiera forzado a reescribir
-`callbacks.py`, que el prompt maestro pide migrar tal cual. Decisión
-documentada acá en vez de asumida en silencio.
+Cambio de esta pasada: preload_to_device + device en el constructor.
+create_dataset/create_dataloader (training/utils.py) NUNCA mueven nada a
+GPU -- el dataset siempre vive en CPU. El movimiento a GPU es
+responsabilidad EXCLUSIVA de Trainer_DL.model_infer, con dos modos:
 
-`Trainer_ML` es nuevo (no existía en repo_viejo como clase -- el script
-`train_ML_model_within_subject_...` maneja el ciclo fit/predict/predict_proba
-inline). Contrato de duck typing, sin heredar de `Trainer_DL` (principio de
-composición sobre herencia del refactor).
+  preload_to_device=False (default): el batch se mueve a `device` DENTRO
+    de model_infer, en cada llamada -- estándar de la comunidad PyTorch,
+    escala a datasets grandes (LeaveOneUnitOutSchema con pool de muchos
+    sujetos) sin requerir que el split completo entre en memoria de GPU.
+
+  preload_to_device=True: asume que quien arma el DataLoader YA movió los
+    tensores a `device` de antemano (X_train_t = torch.tensor(...).to(device)
+    antes de crear el TensorDataset) -- más rápido en tiempo de
+    entrenamiento (sin transferencia CPU->GPU por batch), pero requiere
+    que el split completo entre en memoria de GPU. Con este modo,
+    model_infer NO vuelve a mover nada -- asume que X ya está en el
+    device correcto.
+
+`device` es obligatorio si preload_to_device=False (necesita saber a
+dónde mover cada batch) -- si no se pasa y preload_to_device=False, se
+asume que no hay que mover nada (equivalente a correr en CPU).
 """
 from typing import Any, Callable, Dict, List, Optional
 
 import torch
 
 from src.training.core.callbacks.callback_dispatcher import CallbackDispatcher
+from src.training.core.gradient_clippers import GradientClipper
 from src.training.core.loss_strategy import LossStrategy
 
 
@@ -36,28 +46,41 @@ class Trainer_DL:
         callbacks: Optional[List[Any]] = None,
         use_caching: bool = True,
         loss_strategy: Optional[LossStrategy] = None,
+        gradient_clipper: Optional[GradientClipper] = None,
+        preload_to_device: bool = False,
+        device: Optional[torch.device] = None,
     ):
         """
         Args:
-            model: modelo de PyTorch a entrenar.
+            model: modelo de PyTorch a entrenar. Debe estar YA en el
+                device correcto (model.to(device)) antes de pasarlo acá --
+                Trainer_DL no mueve el modelo, solo los batches (y solo
+                si preload_to_device=False).
             loss_fn: función de loss default.
             optimizer: optimizer.
-            train_loader: DataLoader de entrenamiento.
-            val_loader: DataLoader de validación (opcional).
+            train_loader: DataLoader de entrenamiento. Sus tensores viven
+                en CPU si preload_to_device=False (caso normal), o ya en
+                `device` si preload_to_device=True (el caller los movió
+                antes de armar el DataLoader).
+            val_loader: DataLoader de validación (opcional), mismo
+                criterio que train_loader.
             max_epochs: cantidad de épocas.
             callbacks: lista de instancias de callback YA RESUELTA por el
-                orquestador -- este trainer no agrega ningún default (Timer,
-                LossTracker, etc.), eso es responsabilidad del caller.
+                orquestador.
             use_caching: preservado del original (no usado dentro de esta
-                clase, igual que en repo_viejo).
-            loss_strategy: colaborador Strategy opcional (ver
-                src/training/loss_strategy.py). None (default) preserva el
-                comportamiento actual: `loss_fn(y_pred, y_true)` directo.
-
-        Nota: el parámetro `test_loader` del `Trainer_DL` original se
-        elimina -- estaba muerto (nunca se usaba dentro de la clase); la
-        evaluación final sobre test la corre el orquestador vía
-        `trainer.infer(test_loader)` después de `train()`.
+                clase).
+            loss_strategy: colaborador Strategy opcional. None (default)
+                preserva `loss_fn(y_pred, y_true)` directo.
+            gradient_clipper: colaborador opcional (NormClipper/ValueClipper).
+                None (default) no aplica ningún clipping -- comportamiento
+                preservado para configs existentes.
+            preload_to_device: ver docstring del módulo. False (default) =
+                batch a batch, escala mejor. True = el caller ya movió
+                todo a `device` de antemano.
+            device: a dónde mover cada batch cuando preload_to_device=False.
+                None = no se mueve nada (equivalente a correr en CPU, o a
+                que el caller ya haya movido los tensores por su cuenta
+                sin usar preload_to_device=True explícitamente).
         """
         self.model = model
         self.loss_fn = loss_fn
@@ -71,20 +94,24 @@ class Trainer_DL:
         self.max_epochs = max_epochs
         self.use_caching = use_caching
         self.loss_strategy = loss_strategy
+        self.gradient_clipper = gradient_clipper
+        self.preload_to_device = preload_to_device
+        self.device = device
 
         self.stop_training = False
 
         self.dispatcher = CallbackDispatcher(callbacks)
-        # self.history y initialize_history() ya NO existen acá -- el
-        # dispatcher los inicializa en su propio __init__.
 
     @property
     def history(self) -> Dict[str, Any]:
-        """Delega a self.dispatcher.history. Los callbacks existentes
-        (callbacks.py) siguen haciendo trainer.history[...] sin saber que
-        el dict real vive en el dispatcher -- ver nota en
-        callback_dispatcher.py."""
+        """Delega a self.dispatcher.history -- ver callback_dispatcher.py."""
         return self.dispatcher.history
+
+    def get_history(self) -> Dict[str, Any]:
+        return self.dispatcher.history
+
+    def get_model(self):
+        return self.model
 
     def _compute_loss(self, y_pred, y_true, X):
         if self.loss_strategy is not None:
@@ -93,6 +120,13 @@ class Trainer_DL:
                 default_loss_fn=self.loss_fn,
             )
         return self.loss_fn(y_pred, y_true)
+
+    def _maybe_move_target(self, y_true):
+        """y_true no pasa por model_infer -- se mueve acá aparte, con el
+        mismo criterio de preload_to_device que el resto del batch."""
+        if not self.preload_to_device and self.device is not None:
+            return y_true.to(self.device)
+        return y_true
 
     def train(self) -> None:
         self.dispatcher.notify('on_train_begin', trainer=self)
@@ -103,11 +137,15 @@ class Trainer_DL:
             for batch_idx, (X, y_true) in enumerate(self.train_loader):
                 self.dispatcher.notify('on_batch_begin', trainer=self, batch_idx=batch_idx)
 
+                y_true = self._maybe_move_target(y_true)
+
                 self.optimizer.zero_grad()
                 y_pred = self.model_infer(X)
                 loss = self._compute_loss(y_pred, y_true, X)
 
                 loss.backward()
+                if self.gradient_clipper is not None:
+                    self.gradient_clipper.clip(self.model.parameters())
                 self.optimizer.step()
 
                 self.dispatcher.notify(
@@ -131,6 +169,9 @@ class Trainer_DL:
         with torch.no_grad():
             for batch_idx, (X, y_true) in enumerate(self.val_loader):
                 self.dispatcher.notify('on_batch_begin', trainer=self, batch_idx=batch_idx)
+
+                y_true = self._maybe_move_target(y_true)
+
                 y_pred = self.model_infer(X)
                 loss = self._compute_loss(y_pred, y_true, X)
 
@@ -139,19 +180,13 @@ class Trainer_DL:
                     y_pred=y_pred, y_true=y_true, loss=loss.item(), training=False,
                 )
 
-    def get_history(self) -> Dict[str, Any]:
-        return self.dispatcher.history
-
-    def get_model(self):
-        return self.model
-
     def infer(self, dataloader=None, X=None, probability: bool = True):
         self.model.eval()
         with torch.no_grad():
             if dataloader is not None:
                 y_pred = []
-                for batch_idx, (X, y_true) in enumerate(dataloader):
-                    y_pred.append(self.model_infer(X))
+                for batch_idx, (X_batch, y_true) in enumerate(dataloader):
+                    y_pred.append(self.model_infer(X_batch))
                 y_pred = torch.cat(y_pred, dim=0)
             else:
                 if X is None:
@@ -162,6 +197,18 @@ class Trainer_DL:
         return y_pred
 
     def model_infer(self, X):
+        """Único lugar donde un batch se mueve a GPU. Con
+        preload_to_device=False (default) y device seteado, mueve X acá,
+        justo antes del forward -- batch a batch, nunca el split completo
+        de una. Con preload_to_device=True, NO mueve nada -- asume que X
+        ya está en el device correcto porque el caller ya lo movió al
+        armar el DataLoader."""
+        if not self.preload_to_device and self.device is not None:
+            if isinstance(X, dict):
+                X = {k: v.to(self.device) for k, v in X.items()}
+            else:
+                X = X.to(self.device)
+
         if isinstance(X, dict):
             y_pred = self.model(**X)
         else:
@@ -171,21 +218,13 @@ class Trainer_DL:
 
 class Trainer_ML:
     """Contrato duck-typed (sin heredar de Trainer_DL): `train()`,
-    `infer(X, probability=True)`, `get_history()`. Confirmado contra
-    repo_viejo/train_ML_model_within_subject_online_simulated_for_MI-BCI_classification.py
-    (`model.fit(X_train, y_train)`, `model.predict`/`model.predict_proba`,
-    pesos persistidos vía `joblib.dump`, no `.pth`).
+    `infer(X, probability=True)`, `get_history()`.
 
     X_val/y_val opcionales, sin uso todavía dentro de la clase -- se
     dejan preparados en el constructor para no romper la interfaz cuando
-    se implemente selección de mejor modelo/hiperparámetros vía val
-    (planeado a futuro, coherente con que Trainer_DL también use val con
-    ese propósito, para poder comparar ML y DL bajo el mismo criterio de
-    selección). Hoy, val simplemente no se usa: get_history() sigue
-    devolviendo {} y train() sigue sin tocarlos. Cualquier caller
-    existente que instancie Trainer_ML(model, X_train, y_train) sin val
-    sigue funcionando idéntico -- default None, sin cambio de
-    comportamiento."""
+    se implemente selección de mejor modelo/hiperparámetros vía val.
+    Cualquier caller existente que instancie Trainer_ML(model, X_train,
+    y_train) sin val sigue funcionando idéntico."""
 
     def __init__(self, model, X_train, y_train, X_val=None, y_val=None):
         self.model = model

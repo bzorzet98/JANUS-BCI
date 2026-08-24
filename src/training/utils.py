@@ -14,7 +14,19 @@ from sklearn.metrics import accuracy_score
 from src.utils.imports import import_class
 
 
-def create_dataset(split_name: str, X, y, ds_config: dict):
+def resolve_model_init_seeds(orchestrator_config: dict) -> List[int]:
+    """Forma A: lista fija explícita. Forma B: {n_seeds, seed} ->
+    genera n_seeds enteros aleatorios, reproducible vía seed maestro."""
+    spec = orchestrator_config["model_init_seed"]
+    if isinstance(spec, list):
+        return spec
+    if isinstance(spec, dict):
+        rng = np.random.RandomState(spec["seed"])
+        return [int(s) for s in rng.randint(0, 1_000_000, size=spec["n_seeds"])]
+    raise ValueError(f"model_init_seed debe ser una lista o un dict {{n_seeds, seed}}, es {type(spec)}")
+
+
+def create_dataset(split_name: str, X, y, ds_config: dict, device: str = "cpu"):
     """Instancia un torch Dataset vía import_class. `ds_config` puede tener
     una entrada por split (train/val/test) o ser compartido -- si
     `split_name` es una key de `ds_config`, se usa esa sub-config, si no se
@@ -25,6 +37,7 @@ def create_dataset(split_name: str, X, y, ds_config: dict):
         config = ds_config
     config['params']['X'] = X
     config['params']['y'] = y
+    config['params']['device'] = device
     return import_class(config['class_name'], config['module_name'])(**config['params'])
 
 

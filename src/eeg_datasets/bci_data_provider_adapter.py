@@ -9,11 +9,13 @@ class BCIDataProviderAdapter:
 
     def get_unit(self, unit_id, **kwargs):
         session = kwargs.get("session", self.default_session)
-        return self.dataset.flatten_subject_data(unit_id, session=session)
+        X, y , metadata = self.dataset.flatten_subject_data(unit_id, session=session)
+        return X, y
 
     def get_units(self, unit_ids, **kwargs):
         session = kwargs.get("session", self.default_session)
-        return self.dataset.flatten_pool_data(unit_ids, session=session)
+        X, y , metadata = self.dataset.flatten_pool_data(unit_ids, session=session)
+        return X, y
 
     def list_units(self):
         return self.dataset.subject_list

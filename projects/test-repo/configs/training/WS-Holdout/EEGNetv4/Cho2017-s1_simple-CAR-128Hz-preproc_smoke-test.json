@@ -1,0 +1,84 @@
+{
+    "project_config": {
+        "project_name": "test-repo",
+        "strategy_name": "WS_Holdout",
+        "recipe_name": "EEGNetv4",
+        "database_name": "Cho2017",
+        "database_session": "session_1",
+        "label": "smoke_test"
+    },
+    "script_type": "train_dl",
+    "databases": {
+        "class_name": "PreprocessedDataset",
+        "module_name": "src.eeg_datasets",
+        "params": {
+            "preprocessing_name": "simple-CAR-128Hz-preproc",
+            "db_name": "Cho2017",
+            "sessions": ["session_1"],
+            "subjects": null,
+            "data_to_load": ["motor_imagery"],
+            "channels": ["C3", "Cz", "C4"],
+            "classes_to_return": null
+        }
+    },
+    "data_provider": {
+        "class_name": "BCIDataProviderAdapter",
+        "module_name": "src.eeg_datasets",
+        "params": {
+            "default_session": "session_1"
+        }
+    },
+    "orchestrator": {
+        "model_init_seed": {"n_seeds": 3, "seed": 42},
+        "device": "cuda"
+    },
+    "schema": {
+        "class_name": "WithinUnitHoldoutSchema",
+        "module_name": "src.training.splitting.schemas",
+        "params": {
+            "ptrain": 0.6, "pval": 0.2, "ptest": 0.2,
+            "units_to_test": [1, 2, 10],
+            "dataloader_seed": 8
+        }
+    },
+    "model": {
+        "class_name": "EEGNetv4_SM",
+        "module_name": "src.models",
+        "params": {
+            "in_chans": 3, "n_classes": 2, "input_window_samples": 256,
+            "drop_prob": 0.25, "final_conv_length": "auto", "pool_mode": "mean",
+            "F1": 8, "D": 2, "F2": 16, "kernel_length": 64, "third_kernel_size": [8, 4]
+        }
+    },
+    "trainer": {"params": {"max_epochs": 10}},
+    "optimizer": {
+        "class_name": "Adam", 
+        "module_name": "torch.optim",
+        "params": {"lr": 0.001, "betas": [0.9, 0.999], "eps": 1e-08, "weight_decay": 0.001}
+    },
+    "criterion": {"class_name": "CrossEntropyLoss", 
+                "module_name": "torch.nn", 
+                "params": {}},
+    "torch_dataset": {
+        "class_name": "MIBCI_SimpleDataset",
+        "module_name": "src.eeg_datasets",
+        "params": {"classification": true}
+    },
+    "torch_dataloader": {
+        "train": {"class_name": "DataLoader", 
+                "module_name": "torch.utils.data", 
+                "params": {"batch_size": 200, "shuffle": true}},
+        "train_eval": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 200, "shuffle": false}},
+        "val": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 200, "shuffle": false}},
+        "test": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 200, "shuffle": false}}
+    },
+    "callbacks": [
+         {"class_name": "LossTracker", "module_name": "src.training.core.callbacks", "params": {}},
+        {"class_name": "LoggerCallback", "module_name": "src.training.core.callbacks", "params": {}}
+    ],
+    "metrics_strategy": {
+        "class_name": "ClassificationMetrics",
+        "module_name": "src.training.metrics.classification",
+        "params": {"metrics": ["accuracy", "auc", "f1", "precision", "recall"]}
+    }
+}
