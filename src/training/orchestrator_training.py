@@ -55,7 +55,7 @@ Config esperado (ver sesión de diseño):
 """
 import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import mlflow
 import pandas as pd
@@ -75,7 +75,7 @@ from src.utils.json_utils import save_dict_as_json
 from src.utils.paths import PATHS
 from src.utils.progress_reporter import ProgressReporter
 from src.utils.reproducibility import log_reproducibility_trio
-from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row
+from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row, _clear_sweep_outputs, _drop_csv_rows
 
 logger = logging.getLogger(__name__)
 
@@ -173,12 +173,15 @@ class TrainingOrchestrator:
         )
         lifecycle.check_identity_or_raise(
             new_config=self.config,
+            extra_cleanup=lambda: _clear_sweep_outputs(self.output_path),
             context_label=f"la corrida de training en {self.output_path}",
         )
         log_reproducibility_trio(self.output_path, self.config, self.docker_image)
         return lifecycle
 
-    def _setup_pending_units(self) -> List:
+    def _setup_pending_units(self) -> Dict[Any, List[str]]:
+        """Devuelve {unit_id: [particiones pendientes de esa unidad]}, en
+        el orden de units_to_process()."""
         units = self.schema.units_to_process()
 
         # Expandir unidades a particiones esperadas -- el lifecycle trabaja
@@ -196,15 +199,17 @@ class TrainingOrchestrator:
 
         if not pending_partitions:
             logger.info("Todo ya procesado (%d particiones) -- nada para hacer.", len(unit_by_partition))
-            return []
+            return {}
 
-        # De vuelta a unidades ÚNICAS (sin duplicar si varias particiones
-        # pendientes vienen del mismo unit_id, ej. 2 de los 5 folds de una
-        # unidad K-Fold quedaron pendientes) -- _run_unit ya regenera TODOS
-        # los folds de esa unidad y el guardado interno (save_dict_as_json,
-        # etc.) es idempotente si ya existe.
-        pending_units_ordered = list(dict.fromkeys(unit_by_partition[p] for p in pending_partitions))
-        return pending_units_ordered
+        # Agrupado por unidad: generate_folds se llama una vez por unidad
+        # (carga sus datos una sola vez), pero _run_unit solo entrena los
+        # folds cuya partición sigue pendiente -- ej. si 3 de los 5 folds
+        # de una unidad K-Fold ya están en success, no se reentrenan ni se
+        # duplican sus filas en metrics_results.csv.
+        pending_by_unit: Dict[Any, List[str]] = {}
+        for partition in pending_partitions:
+            pending_by_unit.setdefault(unit_by_partition[partition], []).append(partition)
+        return pending_by_unit
 
     def _setup_metrics_strategy(self):
         """Resuelve MetricsStrategy desde config['metrics_strategy'], o
@@ -276,7 +281,6 @@ class TrainingOrchestrator:
         )
 
     # --- ejecución ---
-
     def run(self) -> None:
         self.provider = self._setup_provider()
         self.schema = self._setup_schema(self.provider)
@@ -289,57 +293,89 @@ class TrainingOrchestrator:
 
         mlflow.set_experiment(f"{self.project_name}/{self.strategy_name}")
 
+        # El reporter avanza una unidad por partición (on_run_result), no
+        # por unit_id -- con K-Fold una unidad aporta K particiones.
+        n_pending_partitions = sum(len(partitions) for partitions in pending_units.values())
+
         if self.reporter:
-            self.reporter.on_start(len(pending_units), meta={
+            self.reporter.on_start(n_pending_partitions, meta={
                 "strategy_name": self.strategy_name, "recipe_name": self.recipe_name,
                 "database_name": self.database_name, "n_units": len(pending_units),
                 "model_init_seeds": model_init_seeds,
             })
 
-        for unit_id in pending_units:
-            self._run_unit(unit_id, model_init_seeds)
+        for unit_id, partitions in pending_units.items():
+            self._run_unit(unit_id, partitions, model_init_seeds)
 
         logger.info("--- Training Finished ---")
         if self.reporter:
-            self.reporter.on_finish({"total": len(pending_units)})
+            self.reporter.on_finish({"total": n_pending_partitions})
 
-    def _run_unit(self, unit_id, model_init_seeds: List[int]) -> None:
+    def _run_unit(self, unit_id, pending_partitions: List[str], model_init_seeds: List[int]) -> None:
         """Una unidad puede producir MÁS DE UN Fold (ej. WithinUnitKFoldSchema
         con K folds) -- cada Fold es una partición independiente en disco,
-        cada una recorre las N seeds de init de pesos."""
-        ts_start = self.lifecycle.mark_start(str(unit_id))
-        status = "success"
+        cada una recorre las N seeds de init de pesos.
 
-        # try:
-        folds = self.schema.generate_folds(unit_id=unit_id)
+        script_progress.csv se escribe POR PARTICIÓN (unit_01,
+        unit_01_fold_0, loo_test-unit_01...), nunca por unit_id: es la
+        misma clave que usan el resume (_setup_pending_units, vía
+        expected_partition_names) y TrainedModelResolver en testing (primer
+        segmento del path de los pesos).
+
+        Un fallo nunca corta el barrido: se loguea con traceback completo
+        (logger.exception), la partición queda 'failed' y el próximo
+        barrido la reintenta."""
+        try:
+            folds = self.schema.generate_folds(unit_id=unit_id)
+        except Exception:
+            # Sin folds no hay a qué partición atribuirle el error más que
+            # a todas las pendientes de esta unidad.
+            logger.exception("Fallo generando los folds de la unidad %s", unit_id)
+            for partition in pending_partitions:
+                ts_start = self.lifecycle.mark_start(partition)
+                if self.reporter:
+                    self.reporter.on_run_start(partition)
+                    self.reporter.on_run_result(partition, "failed")
+                self.lifecycle.mark_result(partition, "failed", ts_start)
+            return
 
         for fold in folds:
             partition = self.schema.partition_name(fold)
-            run_dir = self.output_path / partition
-            run_dir.mkdir(parents=True, exist_ok=True)
-            save_dict_as_json(str(run_dir), fold.metadata, "fold_metadata.json")
+            if partition not in pending_partitions:
+                continue
 
+            ts_start = self.lifecycle.mark_start(partition)
+            status = "success"
             if self.reporter:
                 self.reporter.on_run_start(partition)
 
-            # Generator armado desde lo que EL SCHEMA decidió -- fix
-            # del hallazgo del Generator compartido entre unidades.
-            g = torch.Generator()
-            g.manual_seed(fold.metadata["dataloader_seed"])
+            # Reproceso (reintento tras 'failed', o --force): las filas que
+            # dejó la pasada anterior de ESTA partición se descartan antes
+            # de entrenar, en vez de duplicarse. Se reentrenan todas sus
+            # seeds, no solo las que faltaban: g se comparte entre las seeds
+            # del fold, así que saltear una cambiaría el orden de batches de
+            # las siguientes respecto de una corrida sin cortes.
+            _drop_csv_rows(self.output_path / "metrics_results.csv", "partition", partition)
 
-            for seed in model_init_seeds:
-                self._run_replicate(fold, partition, seed, g)
+            try:
+                run_dir = self.output_path / partition
+                run_dir.mkdir(parents=True, exist_ok=True)
+                save_dict_as_json(str(run_dir), fold.metadata, "fold_metadata.json")
+
+                # Generator armado desde lo que EL SCHEMA decidió -- fix
+                # del hallazgo del Generator compartido entre unidades.
+                g = torch.Generator()
+                g.manual_seed(fold.metadata["dataloader_seed"])
+
+                for seed in model_init_seeds:
+                    self._run_replicate(fold, partition, seed, g)
+            except Exception:
+                logger.exception("Fallo procesando la partición %s", partition)
+                status = "failed"
 
             if self.reporter:
-                self.reporter.on_run_result(partition, "success")
-
-        # except Exception as e:
-        #     logger.error("Fallo procesando unidad %s: %s", unit_id, e)
-        #     status = "failed"
-        #     if self.reporter:
-                # self.reporter.on_run_result(str(unit_id), "failed")
-
-        self.lifecycle.mark_result(str(unit_id), status, ts_start)
+                self.reporter.on_run_result(partition, status)
+            self.lifecycle.mark_result(partition, status, ts_start)
 
     def _run_replicate(self, fold, partition: str, seed: int, g: torch.Generator) -> None:
         """Una réplica = un (fold, seed). set_seed afecta SOLO init de
