@@ -10,8 +10,9 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 from sklearn.metrics import accuracy_score
-
+import torch
 from src.utils.imports import import_class
+
 
 
 def resolve_model_init_seeds(orchestrator_config: dict) -> List[int]:
@@ -26,7 +27,7 @@ def resolve_model_init_seeds(orchestrator_config: dict) -> List[int]:
     raise ValueError(f"model_init_seed debe ser una lista o un dict {{n_seeds, seed}}, es {type(spec)}")
 
 
-def create_dataset(split_name: str, X, y, ds_config: dict, device: str = "cpu"):
+def create_dataset(split_name: str, X, y, ds_config: dict):
     """Instancia un torch Dataset vía import_class. `ds_config` puede tener
     una entrada por split (train/val/test) o ser compartido -- si
     `split_name` es una key de `ds_config`, se usa esa sub-config, si no se
@@ -37,7 +38,6 @@ def create_dataset(split_name: str, X, y, ds_config: dict, device: str = "cpu"):
         config = ds_config
     config['params']['X'] = X
     config['params']['y'] = y
-    config['params']['device'] = device
     return import_class(config['class_name'], config['module_name'])(**config['params'])
 
 
@@ -76,26 +76,31 @@ def build_callbacks(
     escribe a disco -- ese es el que necesita distinguir archivos entre
     seeds (guardado aplanado, Paso 4b). No se inyecta en callbacks que no
     declaran dirname (EarlyStopping, LoggerCallback, etc.), porque esos
-    no escriben archivos y su __init__ no acepta ese parámetro."""
+    no escriben archivos y su __init__ no acepta ese parámetro.
+    Deduplicación: si config_callbacks declara una clase que YA está en
+    base_callbacks (ej. LossTracker, que _setup_default_callbacks agrega
+    automáticamente), el callback del config REEMPLAZA al default en vez
+    de sumarse -- evita que el mismo tipo de callback corra dos veces
+    (bug real encontrado: dos LossTracker escribiendo en la misma key de
+    trainer.history, historia duplicada por época)."""
+    base_callbacks = list(base_callbacks or [])
+    config_callback_classes = {cb["class_name"] for cb in (config_callbacks or [])}
     
-    base_callbacks = base_callbacks or []
-    final_callbacks = list(base_callbacks)
+    final_callbacks = [cb for cb in base_callbacks if type(cb).__name__ not in config_callback_classes]
+
     if config_callbacks:
         for cb in config_callbacks:
             cb_params = cb.get('params', {}).copy()
-            
-            if "scheduler" in cb_params:
-                scheduler_cfg = cb_params["scheduler"]
-                scheduler_class = import_class(scheduler_cfg["class_name"], scheduler_cfg["module_name"])
-                optimizer = aditional_params["optimizer"]  # ver punto 3, nuevo requisito
-                cb_params["scheduler"] = scheduler_class(optimizer, **scheduler_cfg.get("params", {}))
-
-
             writes_to_disk = 'dirname' in cb_params
             if writes_to_disk and aditional_params is not None and aditional_params.get("path_to_save") is not None:
                 cb_params['dirname'] = aditional_params["path_to_save"]
             if writes_to_disk and aditional_params is not None and aditional_params.get("prefix") is not None:
                 cb_params['prefix'] = aditional_params["prefix"]
+            if "scheduler" in cb_params:
+                scheduler_cfg = cb_params["scheduler"]
+                scheduler_class = import_class(scheduler_cfg["class_name"], scheduler_cfg["module_name"])
+                optimizer = aditional_params["optimizer"]  # ver punto 3, nuevo requisito
+                cb_params["scheduler"] = scheduler_class(optimizer, **scheduler_cfg.get("params", {}))
             cb_instance = import_class(cb['class_name'], cb['module_name'])(**cb_params)
             final_callbacks.append(cb_instance)
     return final_callbacks

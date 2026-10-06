@@ -50,7 +50,7 @@
             "F1": 8, "D": 2, "F2": 16, "kernel_length": 64, "third_kernel_size": [8, 4]
         }
     },
-    "trainer": {"params": {"max_epochs": 10}},
+    "trainer": {"params": {"max_epochs": 10, "preload_to_device": true}},
     "optimizer": {
         "class_name": "Adam", 
         "module_name": "torch.optim",
@@ -62,7 +62,7 @@
     "torch_dataset": {
         "class_name": "MIBCI_SimpleDataset",
         "module_name": "src.eeg_datasets",
-        "params": {"classification": true}
+        "params": {}
     },
     "torch_dataloader": {
         "train": {"class_name": "DataLoader", 
@@ -73,7 +73,6 @@
         "test": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 200, "shuffle": false}}
     },
     "callbacks": [
-         {"class_name": "LossTracker", "module_name": "src.training.core.callbacks", "params": {}},
         {"class_name": "LoggerCallback", "module_name": "src.training.core.callbacks", "params": {}}
     ],
     "metrics_strategy": {

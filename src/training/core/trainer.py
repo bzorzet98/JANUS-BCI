@@ -122,10 +122,21 @@ class Trainer_DL:
         return self.loss_fn(y_pred, y_true)
 
     def _maybe_move_target(self, y_true):
-        """y_true no pasa por model_infer -- se mueve acá aparte, con el
-        mismo criterio de preload_to_device que el resto del batch."""
+        """y_true no pasa por model_infer -- se mueve y castea acá aparte,
+        con el mismo criterio de preload_to_device que el resto del batch.
+
+        Cast a .long() si es un tensor entero-como-float (ej. float64/float32
+        proveniente de un numpy sin dtype explícito) -- CrossEntropyLoss y la
+        mayoría de losses de clasificación en PyTorch exigen y_true como
+        LongTensor, no float. No se castea si y_true ya es float genuino
+        (caso regresión, con IdentityLabelTransform -- ahí SÍ puede ser un
+        target continuo real, forzar long lo rompería)."""
         if not self.preload_to_device and self.device is not None:
-            return y_true.to(self.device)
+            y_true = y_true.to(self.device)
+
+        if y_true.dtype in (torch.float32, torch.float64) and torch.equal(y_true, y_true.round()):
+            y_true = y_true.long()
+
         return y_true
 
     def train(self) -> None:
@@ -197,17 +208,16 @@ class Trainer_DL:
         return y_pred
 
     def model_infer(self, X):
-        """Único lugar donde un batch se mueve a GPU. Con
-        preload_to_device=False (default) y device seteado, mueve X acá,
-        justo antes del forward -- batch a batch, nunca el split completo
-        de una. Con preload_to_device=True, NO mueve nada -- asume que X
-        ya está en el device correcto porque el caller ya lo movió al
-        armar el DataLoader."""
         if not self.preload_to_device and self.device is not None:
             if isinstance(X, dict):
                 X = {k: v.to(self.device) for k, v in X.items()}
             else:
                 X = X.to(self.device)
+
+        if isinstance(X, dict):
+            X = {k: v.float() if torch.is_floating_point(v) else v for k, v in X.items()}
+        elif torch.is_floating_point(X):
+            X = X.float()
 
         if isinstance(X, dict):
             y_pred = self.model(**X)
