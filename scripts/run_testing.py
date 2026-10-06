@@ -3,15 +3,9 @@ Punto de entrada para una corrida de testing/evaluación (script_type ==
 "test_dl" o "test_ml"). Evalúa modelos ya entrenados -- posiblemente con
 un dataset/ablación distinto al de training -- no reentrena nada.
 
-NOTA IMPORTANTE: src/training/orchestrator_testing.py (run_testing_sweep)
-TODAVÍA NO fue migrado al diseño nuevo (TrainingSchema/DataProvider/
-MetricsStrategy) -- sigue con la API vieja completa (_compute_test_metrics
-hardcodeada, WithinSubjectMatcher en vez de WithinUnitMatcher, sin Schema
-ni DataProvider). Es deuda de refactorización pendiente, del mismo
-tamaño que la que se le hizo a orchestrator.py -- no forma parte de la
-sesión de diseño actual. Este script queda funcional para lo que
-orchestrator_testing.py YA soporta hoy, pero heredará esa deuda hasta
-que se haga esa migración.
+Instancia TestingOrchestrator -- este archivo es un entrypoint delgado,
+toda la lógica de dominio (DataProvider, resolver/matcher de pesos,
+MetricsStrategy, MLflow) vive en src/training/orchestrator_testing.py.
 """
 import argparse
 import json
@@ -24,8 +18,8 @@ import torch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.preprocessing import ProgressReporter, RichProgressReporter
-from src.training.orchestrator_testing import run_testing_sweep
+from src.utils.progress_reporter import ProgressReporter, RichProgressReporter
+from src.training.orchestrator_testing import TestingOrchestrator
 
 
 def run_testing(
@@ -36,7 +30,12 @@ def run_testing(
     overwrite_existing: bool = False,
     device: str = "cpu",
 ) -> None:
-    run_testing_sweep(config, docker_image, reporter, force=force, overwrite_existing=overwrite_existing)
+    orchestrator = TestingOrchestrator(
+        config, docker_image=docker_image, reporter=reporter,
+        force=force, overwrite_existing=overwrite_existing,
+        device=device,
+    )
+    orchestrator.run()
 
 
 def main():

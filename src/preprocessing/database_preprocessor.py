@@ -17,12 +17,12 @@ import pandas as pd
 
 from src.utils.json_utils import save_dict_as_json
 from src.utils.paths import PATHS
+from src.utils.progress_reporter import ProgressReporter
 from src.utils.reproducibility import log_reproducibility_trio
 from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row, _diff_values
 
 from .artifact_savers import ARTIFACT_SAVERS
 from .preprocess_eeg import EEGPreprocessor, StageResult
-from .progress_reporter import ProgressReporter
 
 logger = logging.getLogger(__name__)
 
