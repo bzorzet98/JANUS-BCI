@@ -10,20 +10,21 @@ Each step is **one branch, one purpose, one cycle**:
 2. The author tells Claude Code: *"Step E2 from docs/IMPLEMENTATION_ORDER.md. Follow CLAUDE.md."*
 3. Claude Code posts a **detailed plan** and writes nothing until the author replies "go". For every class and function it creates or modifies, the plan says why, what it does today, what it will do after, its signature, and who is affected (`CLAUDE.md`, section 3.2).
 4. Claude Code writes code only, and delivers a handoff block that compares the written code with the approved plan.
-5. The author runs the check, commits, pushes, merges with a merge commit, runs the check again on `main`, and deletes the branch.
+5. The author runs the check, commits, pushes the branch, and opens a Pull Request on GitHub. The Pull Request is merged with **"Create a merge commit"**. Then the author updates `main`, runs the check again on it, and deletes the branch. The conventions are in `CONTRIBUTING.md`.
 
-**Large steps are split into stages.** If a step creates or modifies more than two classes, changes a public signature, restructures an existing method, or is large in lines or files (thresholds in `CLAUDE.md`, section 3.3), Claude Code first proposes the stages and waits for approval. Each stage (`E3.1`, `E3.2`, ...) gets its own plan, "go", code, handoff and check. The stages share one branch, with one commit per stage, and the author merges once after the last stage. Every stage leaves the dummy-project running. Inside a step, new code is added first, then callers are switched to it, then the old path is removed.
+**Large steps are split into stages.** If a step creates or modifies more than two classes, changes a public signature, restructures an existing method, or is large in lines or files (thresholds in `CLAUDE.md`, section 3.3), Claude Code first proposes the stages and waits for approval. Each stage (`E3.1`, `E3.2`, ...) gets its own plan, "go", code, handoff and check. The stages share one branch, with one commit per stage, and the author opens one Pull Request after the last stage. Every stage leaves the dummy-project running. Inside a step, new code is added first, then callers are switched to it, then the old path is removed.
 
 *Steps likely to need stages* (an expectation, decided at plan time): B1, D2, D3, E3, E4, F3, F4, F5, H1.
 
 **Every step leaves the dummy-project running.**
 
-**Undoing a step.** Each step is one merge commit, so `git revert -m 1 <merge-commit>` undoes the whole step, including its stages.
+**Undoing a step.** Each step is one Pull Request merged with a merge commit, so `git revert -m 1 <merge-commit>` undoes the whole step, including its stages.
 
 **Before the first step**
 
 - The remote points to the new account, and the old token is revoked.
-- `main` is clean. Every step builds on it, so the first push of `main` publishes the two local commits (`fa4b330` and `43c6867`). They are the base we agreed to keep.
+- The documentation Pull Request is merged, and the local `main` is up to date with the remote (`git pull origin main`). The two earlier local commits (`fa4b330` and `43c6867`) are published with it. They are the base we agreed to keep.
+- `main` is clean. Every step builds on it.
 
 ## 2. The order
 

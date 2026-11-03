@@ -1,17 +1,17 @@
 # CLAUDE.md
 
-Working rules for Claude Code in JANUS-BCI. This file says **how** to work. Facts about the system live in `docs/` (PRD, ARCHITECTURE, STAGE_CONTRACTS, IMPLEMENTATION_ORDER). If a doc and this file disagree about a fact, the doc wins. About how to work, this file wins.
+Working rules for Claude Code in JANUS-BCI. This file says **how** to work. Facts about the system live in `docs/` (PRD, ARCHITECTURE, STAGE_CONTRACTS, IMPLEMENTATION_ORDER). Conventions for branches, commits and Pull Requests live in `CONTRIBUTING.md`. If a doc and this file disagree about a fact, the doc wins. About how to work, this file wins.
 
 ## 1. Roles
 
 - You write code. You do not run anything.
-- The author reads the plan, approves it, runs the checks, commits, pushes, merges and re-tests. Every one of those steps is theirs.
+- The author reads the plan, approves it, runs the checks, commits, pushes, opens and merges the Pull Request, and re-tests. Every one of those steps is theirs.
 - Talk to the author in Spanish. Code, comments, docstrings, docs and commit messages are in English. New user-facing messages are in English. Do not translate existing messages unless the step touches them.
 
 ## 2. Hard rules
 
 1. **No terminal commands of any kind:** no git, python, pip, tests, scripts, ls, cat or grep. Use only the file read, search and edit tools. If a step cannot be done without running something, stop and say so.
-2. **No commits, branches, stashes, resets, pushes or merges.** Never suggest working on `main`.
+2. **No commits, branches, stashes, resets, pushes, merges or Pull Requests.** Never suggest working on `main`.
 3. **Never say that code works or that tests pass.** You cannot run it. Write "written, not executed".
 4. **Write nothing before the author says "go"** on a plan (section 3.2). Reading files is allowed at any time.
 5. Do not read or write under DATA_ROOT, RESULTS_ROOT, `.env` or `src/models/` (unless the step is about models). Do not use the contents of `archive/*` branches unless the author copies a file out for you.
@@ -54,7 +54,7 @@ When in doubt, split. For a LARGE step:
 1. **First reply: the split only.** List the stages (`E3.1`, `E3.2`, ...), and for each one the classes it touches, in one line. Wait for approval of the split before writing any detailed plan.
 2. **Each stage is independently auditable** and leaves the dummy-project running. Prefer this order inside a step: add new code that nothing calls yet, then switch the callers to it, then remove the old path.
 3. **Each stage has its own cycle:** detailed plan, "go", code, handoff, and the author's check.
-4. The stages share the step's branch. The author makes one commit per stage and merges once after the last stage.
+4. The stages share the step's branch. The author makes one commit per stage and opens one Pull Request after the last stage.
 
 ### 3.4 Code
 
@@ -195,24 +195,30 @@ Noticed, not touched
 
 Suggested commit
   <type>: <summary in English>
+  (format and rules: CONTRIBUTING.md)
 
 Git (the author runs)
   git add <files>
   git commit -m "<type>: <summary>"
   git push -u origin <branch>
   # large step: repeat the cycle for the next stage on the same branch
-  # after the last stage and its check:
+  # after the last stage and its check, open a Pull Request:
+  #   base main, compare <branch>, merge with "Create a merge commit"
+  # then, on the author's machine:
   git switch main
-  git merge --no-ff <branch>
+  git pull origin main
   # run the check again on main
-  git push origin main
   git branch -d <branch>
+  git fetch --prune
+
+Pull Request draft (the author pastes it on GitHub)
+  Title: <the suggested commit, or the step summary>
+  What changed: <bullets, one per class or file>
+  Why: <the step id and the PRD requirements it satisfies>
+  How I checked it: left for the author, from the "Check" list above
+  Notes: <behavior that changes, behavior that stays the same, known limits>
 ```
 
-## 9. Git conventions (for the author)
+## 9. Git conventions
 
-- Branch: `type/short-name`. Types: `feat`, `fix`, `docs`, `refactor`, `chore`.
-- Commit: `type: summary`, in English. One commit per step, or per stage in a large step.
-- Merge with a merge commit, never a squash: each run stores the commit hash it ran on.
-- Never commit to `main`. Production runs come from a commit on `main` with a clean tree.
-- To undo a whole step, including all its stages: `git revert -m 1 <merge-commit>`.
+The conventions for branches, commits and Pull Requests are in `CONTRIBUTING.md`. They are not repeated here. In short: one branch per step, `type: summary` commits in English, and a Pull Request merged with a merge commit, never a squash or a rebase.
