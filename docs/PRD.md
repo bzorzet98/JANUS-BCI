@@ -1,7 +1,3 @@
-Este es el **PRD**, en inglés, con los cambios que acordamos. Los ítems marcados *(proposed)* son propuestas mías que todavía no confirmaste. Lo vamos a ir editando mientras escribimos los otros documentos.
-
----
-
 # JANUS-BCI: Product Requirements Document (draft v1)
 
 ## 1. Context and motivation
@@ -141,7 +137,3 @@ The repository is done when it has:
 4. Name of the new script type for signal metrics.
 5. How MLflow logging relates to synchronization (Phase 3).
 6. Does leave-one-unit-out get fixed or declared unsupported?
-
----
-
-Con esto cerramos el primer documento. **Pregunta:** ¿lo dejamos así para pasar al segundo, la arquitectura, o ajustás algo del PRD primero?
