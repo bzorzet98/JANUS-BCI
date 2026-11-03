@@ -17,7 +17,7 @@ from pathlib import Path
 import torch
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.preprocessing import ProgressReporter, RichProgressReporter
+from src.utils.progress_reporter import ProgressReporter, RichProgressReporter
 from src.training.orchestrator_hp_search import HPSearchOrchestrator
 
 

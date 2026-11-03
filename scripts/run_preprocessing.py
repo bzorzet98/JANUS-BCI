@@ -20,8 +20,9 @@ from typing import Optional
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.preprocessing import EEGDatabasePreprocessor, ProgressReporter, RichProgressReporter
+from src.preprocessing import EEGDatabasePreprocessor
 from src.utils.imports import import_class
+from src.utils.progress_reporter import ProgressReporter, RichProgressReporter
 
 
 def run_preprocessing(

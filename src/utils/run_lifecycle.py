@@ -22,9 +22,10 @@ import csv
 import datetime
 import json
 import logging
+import shutil
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -47,6 +48,48 @@ def _append_csv_row(path: Path, row: Dict[str, Any]) -> None:
         if write_header:
             writer.writeheader()
         writer.writerow(row)
+
+
+def _drop_csv_rows(path: Path, column: str, value: str) -> None:
+    """Borra de un CSV de formato largo las filas con `row[column] == value`.
+    Pensado para reprocesar una partición (reintento tras un 'failed', o
+    --force) sin duplicar sus filas: antes de volver a appendear, se
+    descartan las que dejó la pasada anterior de ESA partición. Se lee y
+    reescribe como texto (csv, no pandas) para no alterar el formato de
+    las filas que quedan; la escritura va a un temporal + replace, así un
+    corte a mitad de camino nunca deja el CSV truncado."""
+    if not path.exists():
+        return
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        if fieldnames is None:
+            return
+        rows = [row for row in reader if row.get(column) != value]
+    tmp_path = path.with_name(path.name + ".tmp")
+    with open(tmp_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    tmp_path.replace(path)
+
+
+def _clear_sweep_outputs(output_path: Path, csv_names: Tuple[str, ...] = ("metrics_results.csv",)) -> None:
+    """`extra_cleanup` de --overwrite-existing para training/testing: borra
+    los CSV de métricas y TODAS las subcarpetas de `output_path` (una por
+    partición: pesos, outputs, marcadores). Sin esto, archivos de la
+    identidad anterior -- ej. pesos de seeds que el config nuevo ya no usa
+    -- quedarían mezclados con los nuevos en la misma carpeta de partición
+    (PROTOCOL.md sección 7: nunca se mezclan identidades distintas). El
+    trío (config.json/.git_commit/.docker_image) no se toca acá: el caller
+    lo reescribe después."""
+    for name in csv_names:
+        csv_path = output_path / name
+        if csv_path.exists():
+            csv_path.unlink()
+    for child in output_path.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
 
 
 def _diff_values(old: Any, new: Any, path: str = "identity") -> List[str]:

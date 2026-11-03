@@ -31,27 +31,31 @@ def create_dataset(split_name: str, X, y, ds_config: dict):
     """Instancia un torch Dataset vía import_class. `ds_config` puede tener
     una entrada por split (train/val/test) o ser compartido -- si
     `split_name` es una key de `ds_config`, se usa esa sub-config, si no se
-    usa `ds_config` directamente."""
+    usa `ds_config` directamente.
+
+    Los kwargs se arman en un dict NUEVO -- nunca se escribe X/y dentro de
+    `ds_config`: es un pedazo del config del orquestador, que después se
+    serializa a JSON (trío de reproducibilidad) y se compara como identidad
+    de la corrida."""
     if split_name in ds_config:
         config = ds_config[split_name]
     else:
         config = ds_config
-    config['params']['X'] = X
-    config['params']['y'] = y
-    return import_class(config['class_name'], config['module_name'])(**config['params'])
+    params = {**config.get('params', {}), 'X': X, 'y': y}
+    return import_class(config['class_name'], config['module_name'])(**params)
 
 
 def create_dataloader(split_name: str, dataset, dl_config: dict, g):
     """Instancia un DataLoader vía import_class. Mismo patrón per-split-o-
-    compartido que create_dataset. `g` es el torch.Generator compartido de
-    todo el barrido (seedeado una vez con general_script_config.seed)."""
+    compartido que create_dataset (y mismo criterio de no mutar
+    `dl_config`). `g` es el torch.Generator del fold (ver
+    TrainingOrchestrator._run_unit), o None para inferencia."""
     if split_name in dl_config:
         config = dl_config[split_name]
     else:
         config = dl_config
-    config['params']['dataset'] = dataset
-    config['params']['generator'] = g
-    return import_class(config['class_name'], config['module_name'])(**config['params'])
+    params = {**config.get('params', {}), 'dataset': dataset, 'generator': g}
+    return import_class(config['class_name'], config['module_name'])(**params)
 
 
 def build_callbacks(

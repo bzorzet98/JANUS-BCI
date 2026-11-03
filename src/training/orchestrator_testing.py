@@ -51,7 +51,7 @@ from src.training.weights.resolver import TrainedModelResolver
 from src.utils.imports import import_class
 from src.utils.paths import PATHS
 from src.utils.reproducibility import log_reproducibility_trio
-from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row
+from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row, _clear_sweep_outputs, _drop_csv_rows
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +156,23 @@ class TestingOrchestrator:
             self.model_source["recipe_name"] / origin_dataset_dir / self.model_source["label"]
         )
 
+    def _origin_label_map(self, origin_partition: str) -> Optional[dict]:
+        """Mapeo {clase original: índice} que usó el training de origen en
+        esa partición -- inverso de fold_metadata.json["bin_to_class"]
+        (que ClassificationLabelTransform calcula sobre y_train). Codificar
+        el test con este mapeo, y no con np.unique del propio test,
+        garantiza que el índice i signifique la misma clase que la salida i
+        del modelo aunque al sujeto de test le falte alguna clase. None si
+        el origen no lo dejó registrado (API vieja, o un LabelTransform sin
+        bin_to_class)."""
+        metadata_path = self._origin_output_path() / origin_partition / "fold_metadata.json"
+        if not metadata_path.exists():
+            return None
+        bin_to_class = json.loads(metadata_path.read_text()).get("bin_to_class")
+        if not bin_to_class:
+            return None
+        return {cls: int(idx) for idx, cls in bin_to_class.items()}
+
     def run(self) -> None:
         self.provider = self._setup_provider()
         self.metrics_strategy = self._setup_metrics_strategy()
@@ -171,6 +188,7 @@ class TestingOrchestrator:
         self.lifecycle.check_identity_or_raise(
             new_config=config_snapshot,
             extract_identity=_testing_identity,
+            extra_cleanup=lambda: _clear_sweep_outputs(self.output_path),
             context_label=f"la corrida de testing en {self.output_path}",
         )
         log_reproducibility_trio(self.output_path, config_snapshot, self.docker_image)
@@ -208,11 +226,14 @@ class TestingOrchestrator:
             return
 
         def _still_present(partition: str) -> bool:
+            # .mlflow_run_id_<seed> es el marcador de idempotencia de cada
+            # réplica (PROTOCOL.md sección 4): _run_replicate lo escribe
+            # recién al final, después de appendear sus métricas.
             partition_dir = self.output_path / partition
             if not partition_dir.exists():
                 return False
             return all(
-                (partition_dir / f"seed_{weights.metadata["seed"]}_outputs.csv").exists()
+                (partition_dir / f".mlflow_run_id_{weights.metadata['seed']}").exists()
                 for weights in matches_by_partition[partition]
             )
 
@@ -243,9 +264,31 @@ class TestingOrchestrator:
             self.reporter.on_run_start(partition)
         partition_status = "success"
 
+        # Reproceso (reintento tras 'failed', o --force): se descartan las
+        # filas que dejó la pasada anterior de ESTA partición en vez de
+        # duplicarlas -- mismo criterio que TrainingOrchestrator._run_unit.
+        _drop_csv_rows(self.output_path / "metrics_results.csv", "partition", partition)
+
         try:
             X, y = self.provider.get_unit(unit_id)
-            y_encoded, _ = encode_labels(y)
+
+            origin_partition = matched_weights[0].partition
+            label_map = self._origin_label_map(origin_partition)
+            if label_map is None:
+                logger.warning(
+                    "%s: el fold_metadata.json de origen (%s) no tiene bin_to_class -- se codifican "
+                    "los labels con np.unique del propio test, que solo coincide con el mapeo del "
+                    "training si el test tiene exactamente las mismas clases.", partition, origin_partition,
+                )
+                y_encoded, _ = encode_labels(y)
+            else:
+                unseen = sorted(set(np.unique(y).tolist()) - set(label_map))
+                if unseen:
+                    raise ValueError(
+                        f"el test tiene clases {unseen} que el training de origen ({origin_partition}) "
+                        f"no vio -- mapeo de origen: {label_map}"
+                    )
+                y_encoded, _ = encode_labels(y, label_map=label_map)
 
             X_t = torch.tensor(X, dtype=torch.float).to(device)
             y_t = torch.tensor(y_encoded, dtype=torch.long).to(device)
@@ -255,19 +298,24 @@ class TestingOrchestrator:
             y_true = y_t.cpu().numpy()
 
             for weights in matched_weights:
-                self._run_replicate(partition, weights, X_t, test_loader, y_true, device, schema_name)
+                # Una réplica fallida no corta las demás seeds, pero deja la
+                # partición en 'failed' -- así el próximo barrido la
+                # reintenta en vez de darla por resuelta.
+                if not self._run_replicate(partition, weights, X_t, test_loader, y_true, device, schema_name):
+                    partition_status = "failed"
 
-            if self.reporter:
-                self.reporter.on_run_result(partition, "success")
-
-        except Exception as e:
-            logger.error("Fallo cargando/evaluando %s: %s", partition, e)
+        except Exception:
+            logger.exception("Fallo cargando/evaluando %s", partition)
             partition_status = "failed"
 
+        if self.reporter:
+            self.reporter.on_run_result(partition, partition_status)
         self.lifecycle.mark_result(partition, partition_status, ts_start)
 
-    def _run_replicate(self, partition: str, weights, X_t, test_loader, y_true, device, schema_name: Optional[str]) -> None:
-        origin_seed = weights.metadata["segments"][-1]
+    def _run_replicate(self, partition: str, weights, X_t, test_loader, y_true, device, schema_name: Optional[str]) -> bool:
+        """Evalúa UNA seed de origen. Devuelve False si falla (el error se
+        loguea acá) -- _run_partition decide el status de la partición."""
+        origin_seed = weights.metadata["seed"]
         run_dir = self.output_path / partition
 
         model_cfg = self.config["model"]
@@ -286,10 +334,11 @@ class TestingOrchestrator:
                 "label": self.label,
                 "partition": partition,
                 "origin_partition": weights.partition,
+                "origin_seed": origin_seed,
                 "origin_schema": schema_name or "unknown",
             }
 
-            with mlflow.start_run(run_name=f"{partition}_{origin_seed}", tags=tags) as run:
+            with mlflow.start_run(run_name=f"{partition}_seed{origin_seed}", tags=tags) as run:
                 tester_class = TESTER_REGISTRY[self.model_script_type]
 
                 if tester_class is Tester_DL:
@@ -319,10 +368,8 @@ class TestingOrchestrator:
 
                 (run_dir / f".mlflow_run_id_{origin_seed}").write_text(run.info.run_id)
 
-            if self.reporter:
-                self.reporter.on_run_result(f"{partition}_{origin_seed}", "success")
+            return True
 
-        except Exception as e:
-            logger.error("Fallo testeando %s/%s: %s", partition, origin_seed, e)
-            if self.reporter:
-                self.reporter.on_run_result(f"{partition}_{origin_seed}", "failed")
+        except Exception:
+            logger.exception("Fallo testeando %s/seed %s", partition, origin_seed)
+            return False
