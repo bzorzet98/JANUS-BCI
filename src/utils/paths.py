@@ -66,3 +66,17 @@ class JanusPaths(BaseSettings):
 # Se instancia una sola vez al importar el módulo. Cualquier .env mal
 # configurado revienta acá, no en medio de un experimento.
 PATHS = JanusPaths()
+
+
+def experiment_path(
+    results_root: Path, *,
+    project_name: str, strategy_name: str, recipe_name: str,
+    database_name: str, database_session: str, label: str,
+) -> Path:
+    """Single place that builds the experiment folder path:
+    <results_root>/<project>/<strategy>/<recipe>/<database>_<session>/<label>.
+    Pure: creates nothing and reads nothing."""
+    return (
+        Path(results_root) / project_name / strategy_name / recipe_name /
+        f"{database_name}_{database_session}" / label
+    )
