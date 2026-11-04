@@ -36,3 +36,32 @@ python scripts/run_training.py \
 Reads `dummy-preproc` (`session_1`, units 1 to 3), splits each unit into 12/4/4 trials (train/val/test) with `WithinUnitHoldoutSchema`, and trains `TinyNet` (`src/models/tiny_net.py`) for 10 epochs with seeds 11 and 22. `CustomCheckpoint` saves the weights.
 
 Output: `<RESULTS_ROOT>/dummy-project/WithinUnit/TinyNet/SyntheticBCI_session_1/dummy-train/`, with `metrics_results.csv` and, per unit (`unit_01` to `unit_03`), `fold_metadata.json`, `outputs/seed_N_outputs.csv`, `outputs/seed_N_history.csv` and `weights/seed_N_best.pth`.
+
+## Evaluation
+
+Run the training first.
+
+```bash
+python scripts/run_testing.py \
+  --config projects/dummy-project/configs/testing/WithinUnit-Test/dummy-project_WithinUnit-Test_TinyNet_SyntheticBCI_dummy-eval.json \
+  --device cpu
+```
+
+Loads the `seed_N_best.pth` weights of `dummy-train` and evaluates each one on its whole unit (the 20 trials of `session_1`, training trials included).
+
+Output: `<RESULTS_ROOT>/dummy-project/WithinUnit-Test/TinyNet/SyntheticBCI_session_1/dummy-eval/`, with `metrics_results.csv` (accuracy per unit and origin seed) and, per unit, `.mlflow_run_id_N`.
+
+## HP search
+
+Run the preprocessing first.
+
+```bash
+python scripts/run_hp_search.py \
+  --hp_search_config projects/dummy-project/configs/hp_search/WithinUnit/dummy-project_WithinUnit_TinyNet_SyntheticBCI_optimizer-lr.json \
+  --base_config projects/dummy-project/configs/training/WithinUnit/dummy-project_WithinUnit_TinyNet_SyntheticBCI_dummy-train.json \
+  --device cpu
+```
+
+Uses the training config as the base and tries two Adam learning rates (0.01 and 0.001) on units 1 and 2, with seed 11 only. Each combination is a training run of its own.
+
+Output: `<RESULTS_ROOT>/dummy-project/WithinUnit_HPSearch/TinyNet/SyntheticBCI_session_1/`, with `hp_combinations.csv` and one training folder per combination, labelled `dummy-train_hp<hash>`.

@@ -1,0 +1,13 @@
+{
+  "description": "Dummy-project: search the Adam learning rate of dummy-train on units 1 and 2, seed 11.",
+  "grid": {
+    "optimizer": [
+      {"class_name": "Adam", "module_name": "torch.optim", "params": {"lr": 0.01}},
+      {"class_name": "Adam", "module_name": "torch.optim", "params": {"lr": 0.001}}
+    ]
+  },
+  "dev_units": [1, 2],
+  "fixed_overrides": {
+    "orchestrator.model_init_seed": [11]
+  }
+}

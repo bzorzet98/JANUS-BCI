@@ -1,0 +1,55 @@
+{
+  "script_type": "test_dl",
+  "description": "Dummy-project: evaluate the TinyNet weights of dummy-train on the synthetic dataset (3 units, session_1).",
+  "project_config": {
+    "project_name": "dummy-project",
+    "strategy_name": "WithinUnit-Test",
+    "recipe_name": "TinyNet",
+    "database_name": "SyntheticBCI",
+    "database_session": "session_1",
+    "label": "dummy-eval"
+  },
+  "model_source": {
+    "project_name": "dummy-project",
+    "strategy_name": "WithinUnit",
+    "recipe_name": "TinyNet",
+    "database_name": "SyntheticBCI",
+    "database_session": "session_1",
+    "label": "dummy-train",
+    "script_type": "train_dl"
+  },
+  "databases": {
+    "class_name": "PreprocessedDataset",
+    "module_name": "src.eeg_datasets",
+    "params": {
+      "preprocessing_name": "dummy-preproc",
+      "db_name": "SyntheticBCI",
+      "sessions": ["session_1"],
+      "subjects": [1, 2, 3],
+      "data_to_load": ["motor_imagery"]
+    }
+  },
+  "data_provider": {
+    "class_name": "BCIDataProviderAdapter",
+    "module_name": "src.eeg_datasets",
+    "params": {"default_session": "session_1"}
+  },
+  "model": {
+    "class_name": "TinyNet",
+    "module_name": "src.models.tiny_net",
+    "params": {"n_chans": 4, "n_outputs": 2, "n_filters": 4}
+  },
+  "criterion": {
+    "class_name": "CrossEntropyLoss",
+    "module_name": "torch.nn",
+    "params": {}
+  },
+  "torch_dataset": {
+    "class_name": "MIBCI_SimpleDataset",
+    "module_name": "src.eeg_datasets",
+    "params": {}
+  },
+  "torch_dataloader": {
+    "test": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 20, "shuffle": false}}
+  }
+}
