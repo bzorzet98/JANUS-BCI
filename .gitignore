@@ -2,7 +2,7 @@
 .env
 
 # ── MLFlow y DB analítica (se regeneran) ─────────────────────
-mlflow/mlruns/
+mlruns/
 mlflow/*.db
 db/*.db
 

@@ -16,7 +16,7 @@ Findings that a step noticed but did not change, because they were outside its s
 - `WithinUnitHoldoutSchema` takes `ptrain` but does not use it. Only `pval` and `ptest` decide the split.
 - `RichProgressReporter` is written for preprocessing. During training it shows "Barrido de preprocesamiento", "Dataset: ?", a "Preprocessing ... subjects" bar and "Success: 0 · Failed: 0", because the training orchestrator passes other keys in `meta` and `on_finish` receives only `{"total": n}`.
 - `MLflowLogger.log_dataset_summary` makes MLflow emit three `UserWarning`s per replica, because the dataset source is a plain string. Noise only.
-- If `MLFLOW_TRACKING_URI` is not set, MLflow uses its default store in the current folder, which `.gitignore` does not cover (it covers only `mlflow/mlruns/`). Not checked on the author's machine.
+- If `MLFLOW_TRACKING_URI` is not set, MLflow uses its default store `mlruns/` in the current folder. Seen on the author's machine: `mlruns/` appeared in the repo root. `.gitignore` now ignores `mlruns/` at any level, but the store still lands in the repo root instead of `mlflow/`.
 - `get_git_commit_hash` catches only `CalledProcessError`. A missing git binary raises `FileNotFoundError` (→ C2).
 - `.docker_image` is written only when `--docker-image` is given (→ C2, which adds the environment variable). Consider recording the image digest, not only the tag.
 - `README.md` and `PROTOCOL.md` also name `src/networks` and `src/torch_utils`, which are not packages today. Models are in `src/models`, torch datasets in `src/eeg_datasets` and callbacks in `src/training/core/callbacks`.
