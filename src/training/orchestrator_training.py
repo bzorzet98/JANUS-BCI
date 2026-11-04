@@ -72,7 +72,7 @@ from src.training.tracking.mlflow_logger import MLflowLogger, to_numpy
 from src.training.utils import build_callbacks, create_dataloader, create_dataset, resolve_model_init_seeds
 from src.utils.imports import import_class
 from src.utils.json_utils import save_dict_as_json
-from src.utils.paths import PATHS
+from src.utils.paths import PATHS, experiment_path
 from src.utils.progress_reporter import ProgressReporter
 from src.utils.reproducibility import log_reproducibility_trio
 from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row, _clear_sweep_outputs, _drop_csv_rows
@@ -110,9 +110,10 @@ class TrainingOrchestrator:
         self.script_type = config.get("script_type", "train_dl")
 
         self.dataset_dir_name = f"{self.database_name}_{self.database_session}"
-        self.output_path = (
-            PATHS.results_root / self.project_name / self.strategy_name / self.recipe_name /
-            self.dataset_dir_name / self.label
+        self.output_path = experiment_path(
+            PATHS.results_root,
+            project_name=self.project_name, strategy_name=self.strategy_name, recipe_name=self.recipe_name,
+            database_name=self.database_name, database_session=self.database_session, label=self.label,
         )
 
         self.provider: Optional[DataProvider] = None

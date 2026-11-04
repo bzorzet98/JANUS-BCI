@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.training.orchestrator_training import TrainingOrchestrator
-from src.utils.paths import PATHS
+from src.utils.paths import PATHS, experiment_path
 
 logger = logging.getLogger(__name__)
 
@@ -84,12 +84,16 @@ class HPSearchOrchestrator:
         self.project_name = base_project_config["project_name"]
         self.strategy_name = f"{base_project_config['strategy_name']}_HPSearch"
         self.recipe_name = base_project_config["recipe_name"]
-        self.dataset_dir_name = f"{base_project_config['database_name']}_{base_project_config['database_session']}"
 
-        self.output_path = (
-            PATHS.results_root / self.project_name / self.strategy_name /
-            self.recipe_name / self.dataset_dir_name
-        )
+        # The search folder is the parent of its combinations' experiment
+        # folders: each one trains with this strategy_name and its own label.
+        self.output_path = experiment_path(
+            PATHS.results_root,
+            project_name=self.project_name, strategy_name=self.strategy_name, recipe_name=self.recipe_name,
+            database_name=base_project_config["database_name"],
+            database_session=base_project_config["database_session"],
+            label=base_project_config["label"],
+        ).parent
 
     def _build_combo_configs(self) -> Tuple[List[dict], List[Dict[str, Any]]]:
         """Producto cartesiano de grid. Cada combinación es una COPIA
