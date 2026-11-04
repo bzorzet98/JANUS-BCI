@@ -1,0 +1,54 @@
+{
+  "script_type": "preprocessing",
+  "description": "Dummy-project: band-pass, epoching and arrays for the synthetic dataset (3 units, 2 sessions).",
+  "preprocessing_name": "dummy-preproc",
+  "database": {
+    "class_name": "SyntheticBCI",
+    "module_name": "src.eeg_datasets.synthetic",
+    "kwargs": {
+      "sessions": ["session_1", "session_2"],
+      "subjects": [1, 2, 3],
+      "data_to_load": ["motor_imagery"]
+    }
+  },
+  "preprocessing_pipeline": {
+    "stages": [
+      {
+        "stage_name": "bandpass",
+        "stage_type": "steps",
+        "steps": [
+          {
+            "type": "method",
+            "name": "filter",
+            "kwargs": {"l_freq": 1.0, "h_freq": 40.0, "verbose": false}
+          }
+        ]
+      },
+      {
+        "stage_name": "epoching",
+        "stage_type": "epoching",
+        "config": {
+          "event_id": {"left_hand": 1, "right_hand": 2},
+          "tmin": 0.0,
+          "tmax": 2.0,
+          "baseline": null,
+          "picks": "eeg",
+          "preload": true,
+          "verbose": false
+        }
+      },
+      {
+        "stage_name": "to_arrays",
+        "stage_type": "steps",
+        "steps": [
+          {
+            "type": "function",
+            "name": "extract_data_from_epochs",
+            "module_name": "src.preprocessing",
+            "kwargs": {}
+          }
+        ]
+      }
+    ]
+  }
+}
