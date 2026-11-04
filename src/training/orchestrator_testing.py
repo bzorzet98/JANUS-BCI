@@ -49,7 +49,7 @@ from src.training.utils import create_dataloader, create_dataset, encode_labels
 from src.training.weights.matcher import MATCHER_REGISTRY
 from src.training.weights.resolver import TrainedModelResolver
 from src.utils.imports import import_class
-from src.utils.paths import PATHS
+from src.utils.paths import PATHS, experiment_path
 from src.utils.reproducibility import log_reproducibility_trio
 from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row, _clear_sweep_outputs, _drop_csv_rows
 
@@ -109,10 +109,10 @@ class TestingOrchestrator:
         self.model_source = config["model_source"]
         self.model_script_type = self.model_source.get("script_type", "train_dl")
 
-        dataset_dir_name = f"{self.database_name}_{self.database_session}"
-        self.output_path = (
-            PATHS.results_root / self.project_name / self.strategy_name /
-            self.recipe_name / dataset_dir_name / self.label
+        self.output_path = experiment_path(
+            PATHS.results_root,
+            project_name=self.project_name, strategy_name=self.strategy_name, recipe_name=self.recipe_name,
+            database_name=self.database_name, database_session=self.database_session, label=self.label,
         )
 
         self.provider = None
@@ -150,10 +150,11 @@ class TestingOrchestrator:
         """Path a la carpeta de origen (training) que generó los pesos a
         testear -- construido con la MISMA convención de path que
         TrainingOrchestrator, a partir de model_source."""
-        origin_dataset_dir = f"{self.model_source['database_name']}_{self.model_source['database_session']}"
-        return (
-            PATHS.results_root / self.project_name / self.model_source["strategy_name"] /
-            self.model_source["recipe_name"] / origin_dataset_dir / self.model_source["label"]
+        return experiment_path(
+            PATHS.results_root,
+            project_name=self.project_name, strategy_name=self.model_source["strategy_name"],
+            recipe_name=self.model_source["recipe_name"], database_name=self.model_source["database_name"],
+            database_session=self.model_source["database_session"], label=self.model_source["label"],
         )
 
     def _origin_label_map(self, origin_partition: str) -> Optional[dict]:

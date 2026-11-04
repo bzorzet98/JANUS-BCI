@@ -22,6 +22,8 @@ import re
 import logging
 import pandas as pd
 
+from src.utils.paths import experiment_path
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +46,11 @@ class TrainedModelResolver:
         -- ambos configurables porque el nombre depende de qué callback
         de guardado se use (hoy CustomCheckpoint con prefix="seed_{N}_",
         pero un callback nuevo podría nombrar distinto)."""
-        dataset_dir_name = f"{model_source['database_name']}_{model_source['database_session']}"
-        self.root = (
-            Path(results_root) / model_source["project_name"] / model_source["strategy_name"] /
-            model_source["recipe_name"] / dataset_dir_name / model_source["label"]
+        self.root = experiment_path(
+            results_root,
+            project_name=model_source["project_name"], strategy_name=model_source["strategy_name"],
+            recipe_name=model_source["recipe_name"], database_name=model_source["database_name"],
+            database_session=model_source["database_session"], label=model_source["label"],
         )
         self.weights_glob = weights_glob
         self.seed_pattern = re.compile(seed_pattern)
