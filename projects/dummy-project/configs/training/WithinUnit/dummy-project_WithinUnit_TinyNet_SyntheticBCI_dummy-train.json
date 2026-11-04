@@ -1,0 +1,78 @@
+{
+  "script_type": "train_dl",
+  "description": "Dummy-project: TinyNet on the synthetic dataset (3 units, session_1), within-unit holdout, 2 seeds.",
+  "project_config": {
+    "project_name": "dummy-project",
+    "strategy_name": "WithinUnit",
+    "recipe_name": "TinyNet",
+    "database_name": "SyntheticBCI",
+    "database_session": "session_1",
+    "label": "dummy-train"
+  },
+  "databases": {
+    "class_name": "PreprocessedDataset",
+    "module_name": "src.eeg_datasets",
+    "params": {
+      "preprocessing_name": "dummy-preproc",
+      "db_name": "SyntheticBCI",
+      "sessions": ["session_1"],
+      "subjects": [1, 2, 3],
+      "data_to_load": ["motor_imagery"]
+    }
+  },
+  "data_provider": {
+    "class_name": "BCIDataProviderAdapter",
+    "module_name": "src.eeg_datasets",
+    "params": {"default_session": "session_1"}
+  },
+  "schema": {
+    "class_name": "WithinUnitHoldoutSchema",
+    "module_name": "src.training.splitting.schemas",
+    "params": {
+      "ptrain": 0.6,
+      "pval": 0.2,
+      "ptest": 0.2,
+      "units_to_test": null,
+      "dataloader_seed": 8
+    }
+  },
+  "orchestrator": {
+    "model_init_seed": [11, 22]
+  },
+  "model": {
+    "class_name": "TinyNet",
+    "module_name": "src.models.tiny_net",
+    "params": {"n_chans": 4, "n_outputs": 2, "n_filters": 4}
+  },
+  "optimizer": {
+    "class_name": "Adam",
+    "module_name": "torch.optim",
+    "params": {"lr": 0.01}
+  },
+  "criterion": {
+    "class_name": "CrossEntropyLoss",
+    "module_name": "torch.nn",
+    "params": {}
+  },
+  "callbacks": [
+    {
+      "class_name": "CustomCheckpoint",
+      "module_name": "src.training.core.callbacks",
+      "params": {"dirname": null, "save_best": true}
+    }
+  ],
+  "torch_dataset": {
+    "class_name": "MIBCI_SimpleDataset",
+    "module_name": "src.eeg_datasets",
+    "params": {}
+  },
+  "torch_dataloader": {
+    "train": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 4, "shuffle": true}},
+    "train_eval": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 20, "shuffle": false}},
+    "val": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 20, "shuffle": false}},
+    "test": {"class_name": "DataLoader", "module_name": "torch.utils.data", "params": {"batch_size": 20, "shuffle": false}}
+  },
+  "trainer": {
+    "params": {"max_epochs": 10, "preload_to_device": false}
+  }
+}
