@@ -22,3 +22,17 @@ python scripts/run_preprocessing.py \
 Pipeline: band-pass 1 to 40 Hz, epochs of 0 to 2 s on the EEG channels, then arrays saved as `.npz`.
 
 Output: `<DATA_ROOT>/preprocessed/dummy-preproc/SyntheticBCI/`, with one `<session>/subject_XX/subject_XX_motor_imagery_run_1.npz` per unit and session.
+
+## Training
+
+Run the preprocessing first.
+
+```bash
+python scripts/run_training.py \
+  --config projects/dummy-project/configs/training/WithinUnit/dummy-project_WithinUnit_TinyNet_SyntheticBCI_dummy-train.json \
+  --device cpu
+```
+
+Reads `dummy-preproc` (`session_1`, units 1 to 3), splits each unit into 12/4/4 trials (train/val/test) with `WithinUnitHoldoutSchema`, and trains `TinyNet` (`src/models/tiny_net.py`) for 10 epochs with seeds 11 and 22. `CustomCheckpoint` saves the weights.
+
+Output: `<RESULTS_ROOT>/dummy-project/WithinUnit/TinyNet/SyntheticBCI_session_1/dummy-train/`, with `metrics_results.csv` and, per unit (`unit_01` to `unit_03`), `fold_metadata.json`, `outputs/seed_N_outputs.csv`, `outputs/seed_N_history.csv` and `weights/seed_N_best.pth`.
