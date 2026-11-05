@@ -6,7 +6,6 @@ Findings that a step noticed but did not change, because they were outside its s
 
 - `README.md`, `PROTOCOL.md` and `projects/NID/README.md` still name `scripts/run_production.py`. The commands today are the per-stage scripts (`run_preprocessing.py`, `run_training.py`, ...).
 - `Subject._to_mne_epochs`: the error message talks about the keys `X` and `y`, but the check is on `data` and `labels`.
-- `EEGDatabasePreprocessor.run`: when loading a subject fails, the partition `subject_XX/unknown/unknown` has no session either. Same family as C1 (→ C1).
 - `Lee2019.__init__` uses a mutable list as the default of `sessions`.
 
 ## A2
@@ -53,3 +52,7 @@ Findings that a step noticed but did not change, because they were outside its s
 - Ordering of text unit ids (→ Phase 2). A folder listing sorts as `unit_1`, `unit_10`, `unit_2`, and a SQL `ORDER BY unit` does the same. Use the provider's order or a numeric cast. The code never relies on folder order.
 - Preprocessing folders keep `subject_XX` with two digits. Preprocessing cannot import the partition-naming function (dependency rules), so the two naming rules differ. Known inconsistency, not scheduled.
 - Module docstrings still name old matchers: `orchestrator_testing.py` (line 19, `WithinSubjectMatcher` -> `WithinUnitMatcher`) and `resolver.py` (line 6, `WithinSubjectMatcher`). Since B3.2 the matcher is `OriginPartitionMatcher`.
+
+## C1
+
+- `EEGDatabasePreprocessor._save_artifacts` writes to `artifacts/<stage>/subject_XX/<prefix>`, and neither the folder nor the prefix carries the session. With two sessions, the artifacts of the second session probably overwrite those of the first (read in the code, not executed). Fixing it changes the artifact layout in `STAGE_CONTRACTS.md` section 1. Not scheduled.
