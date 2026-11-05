@@ -51,7 +51,7 @@ from src.training.weights.resolver import TrainedModelResolver
 from src.utils.imports import import_class
 from src.utils.paths import PATHS, experiment_path
 from src.utils.reproducibility import log_reproducibility_trio
-from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row, _clear_sweep_outputs, _drop_csv_rows
+from src.utils.run_lifecycle import RunLifecycleManager, append_csv_row, clear_sweep_outputs, drop_csv_rows
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +189,7 @@ class TestingOrchestrator:
         self.lifecycle.check_identity_or_raise(
             new_config=config_snapshot,
             extract_identity=_testing_identity,
-            extra_cleanup=lambda: _clear_sweep_outputs(self.output_path),
+            extra_cleanup=lambda: clear_sweep_outputs(self.output_path),
             context_label=f"la corrida de testing en {self.output_path}",
         )
         log_reproducibility_trio(self.output_path, config_snapshot, self.docker_image)
@@ -268,7 +268,7 @@ class TestingOrchestrator:
         # Reproceso (reintento tras 'failed', o --force): se descartan las
         # filas que dejó la pasada anterior de ESTA partición en vez de
         # duplicarlas -- mismo criterio que TrainingOrchestrator._run_unit.
-        _drop_csv_rows(self.output_path / "metrics_results.csv", "partition", partition)
+        drop_csv_rows(self.output_path / "metrics_results.csv", "partition", partition)
 
         try:
             X, y = self.provider.get_unit(unit_id)
@@ -362,7 +362,7 @@ class TestingOrchestrator:
                 for row in metrics_rows:
                     row["partition"] = partition
                     row["origin_seed"] = origin_seed
-                    _append_csv_row(self.output_path / "metrics_results.csv", row)
+                    append_csv_row(self.output_path / "metrics_results.csv", row)
                     mlflow.log_metric(row["metric_name"], row["value"])
                 if loss is not None:
                     mlflow.log_metric("loss", float(loss))

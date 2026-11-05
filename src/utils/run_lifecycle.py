@@ -36,7 +36,7 @@ def _now() -> str:
     return datetime.datetime.now().isoformat()
 
 
-def _append_csv_row(path: Path, row: Dict[str, Any]) -> None:
+def append_csv_row(path: Path, row: Dict[str, Any]) -> None:
     """Append + flush por fila (abre/escribe/cierra) — nada se acumula en
     memoria, así un barrido que se cae a mitad de camino deja consultable
     todo lo ya procesado. Promovido desde
@@ -50,7 +50,7 @@ def _append_csv_row(path: Path, row: Dict[str, Any]) -> None:
         writer.writerow(row)
 
 
-def _drop_csv_rows(path: Path, column: str, value: str) -> None:
+def drop_csv_rows(path: Path, column: str, value: str) -> None:
     """Borra de un CSV de formato largo las filas con `row[column] == value`.
     Pensado para reprocesar una partición (reintento tras un 'failed', o
     --force) sin duplicar sus filas: antes de volver a appendear, se
@@ -74,7 +74,7 @@ def _drop_csv_rows(path: Path, column: str, value: str) -> None:
     tmp_path.replace(path)
 
 
-def _clear_sweep_outputs(output_path: Path, csv_names: Tuple[str, ...] = ("metrics_results.csv",)) -> None:
+def clear_sweep_outputs(output_path: Path, csv_names: Tuple[str, ...] = ("metrics_results.csv",)) -> None:
     """`extra_cleanup` de --overwrite-existing para training/testing: borra
     los CSV de métricas y TODAS las subcarpetas de `output_path` (una por
     partición: pesos, outputs, marcadores). Sin esto, archivos de la
@@ -92,7 +92,7 @@ def _clear_sweep_outputs(output_path: Path, csv_names: Tuple[str, ...] = ("metri
             shutil.rmtree(child)
 
 
-def _diff_values(old: Any, new: Any, path: str = "identity") -> List[str]:
+def diff_values(old: Any, new: Any, path: str = "identity") -> List[str]:
     """Diff recursivo genérico, para armar el mensaje de 'qué cambió' cuando
     la identidad guardada no coincide con la nueva. Promovido desde
     `database_preprocessor.py` (antes módulo-level ahí, ahora reusado como
@@ -105,7 +105,7 @@ def _diff_values(old: Any, new: Any, path: str = "identity") -> List[str]:
             elif key not in new:
                 diffs.append(f"{path}.{key}: eliminado (era {old[key]!r})")
             elif old[key] != new[key]:
-                diffs.extend(_diff_values(old[key], new[key], f"{path}.{key}"))
+                diffs.extend(diff_values(old[key], new[key], f"{path}.{key}"))
     elif old != new:
         diffs.append(f"{path}: {old!r} -> {new!r}")
     return diffs
@@ -156,7 +156,7 @@ class RunLifecycleManager:
         (batch/cron) rechaza duro -- nunca bloquea esperando input
         (PROTOCOL.md sección 7)."""
         if diff_fn is None:
-            diff_fn = _diff_values
+            diff_fn = diff_values
         if not self.identity_path.exists():
             return
 
@@ -257,7 +257,7 @@ class RunLifecycleManager:
         solo aparezca la fila final al terminar esa partition."""
         ts_start = _now()
         if self.emit_running_row:
-            _append_csv_row(self.progress_path, {
+            append_csv_row(self.progress_path, {
                 "partition": partition,
                 "status": "running",
                 "timestamp_start": ts_start,
@@ -268,7 +268,7 @@ class RunLifecycleManager:
     def mark_result(self, partition: str, status: str, ts_start: str) -> None:
         """Appendea la fila terminal (contrato PROTOCOL.md sección 6:
         `partition`/`status`/`timestamp_start`/`timestamp_end`)."""
-        _append_csv_row(self.progress_path, {
+        append_csv_row(self.progress_path, {
             "partition": partition,
             "status": status,
             "timestamp_start": ts_start,

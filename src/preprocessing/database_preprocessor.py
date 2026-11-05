@@ -19,7 +19,7 @@ from src.utils.json_utils import save_dict_as_json
 from src.utils.paths import PATHS
 from src.utils.progress_reporter import ProgressReporter
 from src.utils.reproducibility import log_reproducibility_trio
-from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row, _diff_values
+from src.utils.run_lifecycle import RunLifecycleManager, append_csv_row, diff_values
 
 from .artifact_savers import ARTIFACT_SAVERS
 from .preprocess_eeg import EEGPreprocessor, StageResult
@@ -90,7 +90,7 @@ def _diff_pipeline(old_pipeline: Optional[dict], new_pipeline: Optional[dict]) -
             diffs.append(f"stage '{name}' agregado")
     for name in old_stages:
         if name in new_stages and old_stages[name] != new_stages[name]:
-            diffs.extend(_diff_values(old_stages[name], new_stages[name], f"stage '{name}'"))
+            diffs.extend(diff_values(old_stages[name], new_stages[name], f"stage '{name}'"))
     return diffs
 
 
@@ -374,7 +374,7 @@ class EEGDatabasePreprocessor:
         path = self.output_path / "stage_metrics.csv"
         for stage_name, stage_metrics in metrics.items():
             for metric_name, value in stage_metrics.items():
-                _append_csv_row(path, {
+                append_csv_row(path, {
                     "partition": partition,
                     "stage_name": stage_name,
                     "metric_name": metric_name,
@@ -386,12 +386,12 @@ class EEGDatabasePreprocessor:
             for detail_key, rows in stage_details.items():
                 path = self.output_path / f"{stage_name}_{detail_key}.csv"
                 for row in rows:
-                    _append_csv_row(path, {"partition": partition, **row})
+                    append_csv_row(path, {"partition": partition, **row})
 
     def _append_run_registry(
         self, *, partition, subject, session, context, run_id, status, ts_start, ts_end, output_path
     ) -> None:
-        _append_csv_row(self.output_path / "run_registry.csv", {
+        append_csv_row(self.output_path / "run_registry.csv", {
             "partition": partition,
             "subject_id": subject,
             "session": session,

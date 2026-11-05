@@ -75,7 +75,7 @@ from src.utils.json_utils import save_dict_as_json
 from src.utils.paths import PATHS, experiment_path
 from src.utils.progress_reporter import ProgressReporter
 from src.utils.reproducibility import log_reproducibility_trio
-from src.utils.run_lifecycle import RunLifecycleManager, _append_csv_row, _clear_sweep_outputs, _drop_csv_rows
+from src.utils.run_lifecycle import RunLifecycleManager, append_csv_row, clear_sweep_outputs, drop_csv_rows
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +174,7 @@ class TrainingOrchestrator:
         )
         lifecycle.check_identity_or_raise(
             new_config=self.config,
-            extra_cleanup=lambda: _clear_sweep_outputs(self.output_path),
+            extra_cleanup=lambda: clear_sweep_outputs(self.output_path),
             context_label=f"la corrida de training en {self.output_path}",
         )
         log_reproducibility_trio(self.output_path, self.config, self.docker_image)
@@ -356,7 +356,7 @@ class TrainingOrchestrator:
             # seeds, no solo las que faltaban: g se comparte entre las seeds
             # del fold, así que saltear una cambiaría el orden de batches de
             # las siguientes respecto de una corrida sin cortes.
-            _drop_csv_rows(self.output_path / "metrics_results.csv", "partition", partition)
+            drop_csv_rows(self.output_path / "metrics_results.csv", "partition", partition)
 
             try:
                 run_dir = self.output_path / partition
@@ -467,8 +467,8 @@ class TrainingOrchestrator:
             self._write_history_csv(history, run_dir, seed)
 
         metrics_csv_path = self.output_path / "metrics_results.csv"
-        self.mlflow_logger.log_test_metrics(fold, y_pred_test, partition, seed, _append_csv_row, metrics_csv_path)
-        self.mlflow_logger.log_duration(history, _append_csv_row, metrics_csv_path, partition, seed)
+        self.mlflow_logger.log_test_metrics(fold, y_pred_test, partition, seed, append_csv_row, metrics_csv_path)
+        self.mlflow_logger.log_duration(history, append_csv_row, metrics_csv_path, partition, seed)
 
     def _train_dl_replicate(self, fold, model, run_dir: Path, seed: int, g: torch.Generator):
         """Devuelve (y_pred_train, y_pred_val, y_pred_test, history) --
