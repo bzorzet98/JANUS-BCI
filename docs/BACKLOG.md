@@ -25,8 +25,7 @@ Findings that a step noticed but did not change, because they were outside its s
 - Evaluation in the dummy-project uses the same dataset and session as training, and evaluates the whole unit, training trials included. This is a known limit (`STAGE_CONTRACTS.md`, section 4), so the evaluation accuracy means nothing there.
 - Relaunching the HP search appends the rows of `hp_combinations.csv` again (→ G2). The combinations themselves report that there is nothing to do.
 - `run_hp_search.py` uses underscores in `--hp_search_config` and `--base_config`, and has no `--force` or `--expand` to forward (→ G1).
-- `TestingOrchestrator` builds the origin path with `project_config.project_name`, while `TrainedModelResolver` reads `model_source.project_name` (→ C3). The dummy evaluation config sets both to `dummy-project`.
-- `TestingOrchestrator.run` writes `config.json` and `.git_commit` before resolving the weights. If `model_source` points to a folder that does not exist (for example a typo in the label), it logs a warning about the origin schema and an INFO line ("nada para hacer"), then ends without an error and leaves the record behind. Related to C3.
+- `TestingOrchestrator.run` writes `config.json` and `.git_commit` before resolving the weights, so an error raised while resolving them leaves the record behind. Since C3, a missing origin folder stops the run before anything is written.
 - `TestingOrchestrator.run` creates the output folder before the identity check, so a rejected run leaves an empty folder (→ F1).
 - `TestingOrchestrator._run_replicate` writes `config.json` and `.git_commit` inside each partition folder, once per replica, so every unit folder (`unit_1_fold_0`, ...) holds a copy of the config. `STAGE_CONTRACTS.md` section 4 asks for one record per execution. Author's decision: a future step removes the per-partition copies and keeps a single `config.json` in the label folder. No step in the order names it yet.
 - `TestingOrchestrator` decides what to resume from the `.mlflow_run_id_<seed>` markers (→ D3).
@@ -55,3 +54,9 @@ Findings that a step noticed but did not change, because they were outside its s
 ## C1
 
 - `EEGDatabasePreprocessor._save_artifacts` writes to `artifacts/<stage>/subject_XX/<prefix>`, and neither the folder nor the prefix carries the session. With two sessions, the artifacts of the second session probably overwrite those of the first (read in the code, not executed). Fixing it changes the artifact layout in `STAGE_CONTRACTS.md` section 1. Not scheduled.
+
+## C3
+
+- "Clear errors for unsupported origins" was left out of C3: since B3.2, k-fold origins work and a leave-one-unit-out origin stops with an error. Two gaps remain (→ I2).
+  - `TestingOrchestrator._origin_unit`: for a leave-one-unit-out origin, the message says "Retrain the origin with the current code", which does not help, because the current code still writes `test_unit` instead of `unit_id`.
+  - The error is raised after `config.json` and `.git_commit` are written (see A3). Raising it before writing means resolving the weights earlier in `TestingOrchestrator.run`.
