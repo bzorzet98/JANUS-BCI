@@ -104,7 +104,11 @@ class TestingOrchestrator:
         self.database_session = project_config["database_session"]
         self.label = project_config["label"]
 
-        self.model_source = config["model_source"]
+        # The origin project defaults to this config's project and is read
+        # from model_source only, both for the origin path and for the
+        # weights resolver. A copy, so config.json keeps what the author wrote.
+        self.model_source = dict(config["model_source"])
+        self.model_source.setdefault("project_name", self.project_name)
         self.model_script_type = self.model_source.get("script_type", "train_dl")
 
         self.output_path = experiment_path(
@@ -150,7 +154,7 @@ class TestingOrchestrator:
         TrainingOrchestrator, a partir de model_source."""
         return experiment_path(
             PATHS.results_root,
-            project_name=self.project_name, strategy_name=self.model_source["strategy_name"],
+            project_name=self.model_source["project_name"], strategy_name=self.model_source["strategy_name"],
             recipe_name=self.model_source["recipe_name"], database_name=self.model_source["database_name"],
             database_session=self.model_source["database_session"], label=self.model_source["label"],
         )
@@ -188,7 +192,26 @@ class TestingOrchestrator:
             )
         return metadata["unit_id"]
 
+    def _check_origin_folder(self) -> None:
+        """Stops the run, before anything is read or written, if the origin
+        training folder is this evaluation's output folder or does not exist."""
+        origin = self._origin_output_path()
+        if origin == self.output_path:
+            raise ValueError(
+                f"The evaluation output folder is the origin training folder: {origin}. "
+                f"Writing there would overwrite the origin's config.json, and "
+                f"--overwrite-existing would delete its weights. Give the evaluation its own "
+                f"folder: change project_config.strategy_name (for example, add '-Test') "
+                f"or project_config.label."
+            )
+        if not origin.exists():
+            raise ValueError(
+                f"The origin training folder does not exist: {origin}. Check model_source "
+                f"(project_name, strategy_name, recipe_name, database_name, database_session, label)."
+            )
+
     def run(self) -> None:
+        self._check_origin_folder()
         self.provider = self._setup_provider()
         self.metrics_strategy = self._setup_metrics_strategy()
 
