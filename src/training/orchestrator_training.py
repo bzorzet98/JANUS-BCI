@@ -317,8 +317,8 @@ class TrainingOrchestrator:
         con K folds) -- cada Fold es una partición independiente en disco,
         cada una recorre las N seeds de init de pesos.
 
-        script_progress.csv se escribe POR PARTICIÓN (unit_01,
-        unit_01_fold_0, loo_test-unit_01...), nunca por unit_id: es la
+        script_progress.csv se escribe POR PARTICIÓN (unit_1_fold_0,
+        unit_1_fold_1, ...), nunca por unit_id: es la
         misma clave que usan el resume (_setup_pending_units, vía
         expected_partition_names) y TrainedModelResolver en testing (primer
         segmento del path de los pesos).
