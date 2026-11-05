@@ -16,8 +16,7 @@ Findings that a step noticed but did not change, because they were outside its s
 - `RichProgressReporter` is written for preprocessing. During training it shows "Barrido de preprocesamiento", "Dataset: ?", a "Preprocessing ... subjects" bar and "Success: 0 · Failed: 0", because the training orchestrator passes other keys in `meta` and `on_finish` receives only `{"total": n}`.
 - `MLflowLogger.log_dataset_summary` makes MLflow emit three `UserWarning`s per replica, because the dataset source is a plain string. Noise only.
 - If `MLFLOW_TRACKING_URI` is not set, MLflow uses its default store `mlruns/` in the current folder. Seen on the author's machine: `mlruns/` appeared in the repo root. `.gitignore` now ignores `mlruns/` at any level, but the store still lands in the repo root instead of `mlflow/`.
-- `get_git_commit_hash` catches only `CalledProcessError`. A missing git binary raises `FileNotFoundError` (→ C2).
-- `.docker_image` is written only when `--docker-image` is given (→ C2, which adds the environment variable). Consider recording the image digest, not only the tag.
+- `.docker_image` records the image tag only. Consider recording the image digest too.
 - `README.md` and `PROTOCOL.md` also name `src/networks` and `src/torch_utils`, which are not packages today. Models are in `src/models`, torch datasets in `src/eeg_datasets` and callbacks in `src/training/core/callbacks`.
 - `projects/NID/configs/training/WS-Standard/2026-NID_WS-Standard_CTNet_Cho2017_CAR-Bilateral-Full.json` uses the old format (`general_script_config`, `model_to_train`, `src.networks`, `src.torch_utils`). It has no `recipe_name`, `data_provider`, `schema` or `orchestrator`, so the current training orchestrator cannot run it. C4 will reject it with a clear message (→ C4); migrating it is not in any step. Only this NID config was read.
 
