@@ -39,7 +39,7 @@
 START and END events, as in `ARCHITECTURE.md`, with one addition.
 
 - **Source references** *(proposed extension of R4)*. START holds a list of references, one per folder the stage reads: kind, folder relative to a named root (data or results), status, last end time, config name. The preprocessing snapshot is the reference of kind *preprocessing*. The origin training of an evaluation is a reference of kind *training*. This list fills the "comes from" column of the watch.
-- **Reproducibility.** `.git_commit` and `.docker_image` stay as files. The dirty flag and the config file name go into START. The Docker image comes from `--docker-image` or an environment variable. A missing git binary is tolerated *(R5)*.
+- **Reproducibility.** `.git_commit` and `.docker_image` stay as files. The dirty flag and the config file name go into START. The Docker image comes from `--docker-image` or, if the flag is absent, the environment variable `JANUS_DOCKER_IMAGE`. A missing git binary is tolerated *(R5)*.
 - **Status** is derived from the last START and its END (R3).
 
 ### 0.4 Validation before running (R14)
