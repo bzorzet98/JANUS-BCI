@@ -35,7 +35,7 @@ python scripts/run_training.py \
 
 Reads `dummy-preproc` (`session_1`, units 1 to 3), splits each unit into 12/4/4 trials (train/val/test) with `WithinUnitHoldoutSchema`, and trains `TinyNet` (`src/models/tiny_net.py`) for 10 epochs with seeds 11 and 22. `CustomCheckpoint` saves the weights.
 
-Output: `<RESULTS_ROOT>/dummy-project/WithinUnit/TinyNet/SyntheticBCI_session_1/dummy-train/`, with `metrics_results.csv` and, per unit (`unit_01` to `unit_03`), `fold_metadata.json`, `outputs/seed_N_outputs.csv`, `outputs/seed_N_history.csv` and `weights/seed_N_best.pth`.
+Output: `<RESULTS_ROOT>/dummy-project/WithinUnit/TinyNet/SyntheticBCI_session_1/dummy-train/`, with `metrics_results.csv` and, per unit (`unit_1_fold_0` to `unit_3_fold_0`), `fold_metadata.json`, `outputs/seed_N_outputs.csv`, `outputs/seed_N_history.csv` and `weights/seed_N_best.pth`.
 
 ## Evaluation
 

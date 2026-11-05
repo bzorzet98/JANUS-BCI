@@ -14,6 +14,7 @@ from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 from src.training.core.label_transform import ClassificationLabelTransform, LabelTransform
 from src.training.data_provider import DataProvider
 from src.training.splitting.fold import Fold
+from src.training.splitting.partition_naming import build_partition_name
 
 
 class WithinUnitKFoldSchema:
@@ -47,7 +48,7 @@ class WithinUnitKFoldSchema:
         return [self.partition_name_for_fold(unit_id, fold_idx) for fold_idx in range(self.k_folds)]
 
     def partition_name_for_fold(self, unit_id, fold_idx: int) -> str:
-        return f"unit_{unit_id:02d}_fold_{fold_idx}"
+        return build_partition_name(unit_id, fold_idx)
 
     def generate_folds(self, **context) -> List[Fold]:
         """context esperado: unit_id."""

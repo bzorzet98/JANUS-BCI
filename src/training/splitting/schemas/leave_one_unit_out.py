@@ -12,6 +12,7 @@ import numpy as np
 from src.training.core.label_transform import ClassificationLabelTransform, LabelTransform
 from src.training.data_provider import DataProvider
 from src.training.splitting.fold import Fold
+from src.training.splitting.partition_naming import build_partition_name
 
 
 class LeaveOneUnitOutSchema:
@@ -50,7 +51,7 @@ class LeaveOneUnitOutSchema:
         return [self.partition_name_for_unit(unit_id)]
 
     def partition_name_for_unit(self, unit_id) -> str:
-        return f"loo_test-unit_{unit_id:02d}"
+        return build_partition_name(unit_id, 0)
 
     def generate_folds(self, **context) -> List[Fold]:
         """context esperado: unit_id (UN identificador, no una lista --
