@@ -79,8 +79,8 @@ High cohesion and low coupling; DRY; KISS and YAGNI; SOLID; abstraction and enca
 | ID | Requirement |
 |---|---|
 | R14 | **Config validation before running:** script type, required fields, non-empty label, and consistency of database name and session. Errors are clear and nothing is written. |
-| R15 | `unit` is a text key (`1`, `2`, `A`, `B`). Order comes from the data provider. |
-| R16 | Partition folder names come from a single function. Numeric ids keep zero-padding so existing data stays readable. *(proposed)* |
+| R15 | Unit ids cannot contain a path separator or the text _fold_.|
+| R16 | Partition folder names come from a single function: `unit_<id>_fold_<k>` for every split schema. The unit id is used as text, without padding. The fold index starts at 0. The split schema is named in the strategy, not in the partition. |
 | R17 | `trial_idx` is the position in the unit's reading order. Every output file carries its partition and seed. *(proposed)* |
 
 ### 7.4 Watch

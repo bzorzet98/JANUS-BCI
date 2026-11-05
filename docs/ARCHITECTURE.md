@@ -133,8 +133,8 @@ A rejected execution writes nothing, so it can never appear as *in progress*. EN
 The contract of each stage is in `STAGE_CONTRACTS.md`.
 
 **Contracts fixed in Phase 1 because Phase 2 will read them (R15 to R17)**
-- `unit` is a text key. Order comes from the data provider.
-- The partition folder name comes from one function. Numeric ids keep zero-padding.
+- `unit` is a text key that cannot contain a path separator or `_fold_`. Order comes from the data provider.
+- The partition folder name comes from one function: `unit_<id>_fold_<k>` for every split schema. The unit id is used as text, without padding.
 - `trial_idx` is the position in the unit's reading order. Every output file carries its partition and seed.
 - Each replica has its own batch generator derived from the fold.
 
@@ -238,8 +238,8 @@ Large refactors wait for the dummy-project to exist.
 |---|---|
 | Experiment folder | `project/strategy/recipe/database_session/label` |
 | Execution | One launch of a command on an experiment folder |
-| Unit | A subject, or in another domain a patient, image or session. A text key |
-| Partition | A unit or fold directory (`unit_01`, `unit_01_fold_k`, `loo_test-unit_01`) |
+| Unit | The entity a result is reported for, and that data are grouped by. In EEG it is a subject. The engine does not assume what it is: the domain provides its ids, its order and its data. A unit id is a text key and cannot contain a path separator or the text `_fold_`. |
+| Partition | The directory of one fold of one unit: `unit_<id>_fold_<k>`, for example unit_1_fold_0. In leave-one-unit-out, the unit is the left-out test unit, and the model is trained on the other units. |
 | Replica | One run with a model-initialization seed |
 | Run log | Per-folder file of START and END events |
 | Snapshot | Copy of a preprocessing folder's state, taken when an execution starts and never updated |

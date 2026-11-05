@@ -46,7 +46,7 @@ Each step is **one branch, one purpose, one cycle**:
 |---|---|---|---|---|
 | B1 | `refactor/experiment-path` | One function builds the experiment path (copied in five places today) | A3 | Same folder tree as in block A |
 | B2 | `refactor/lifecycle-public-helpers` | The lifecycle helpers used by three modules become public | B1 | Same behavior |
-| B3 | `refactor/partition-naming` | One function builds partition names. `unit` is a text key. Numeric ids keep zero-padding (R15, R16) | B2 | Same partition folders. A non-numeric unit id such as `A` works |
+| B3 | `feat/partition-naming` | One function builds partition names for every schema: `unit_<id>_fold_<k>`. `unit` is a text key (R15, R16) | B2 | Folders are named `unit_1_fold_0`. A non-numeric unit id such as `A` works |
 
 ### C. Silent errors
 
