@@ -26,10 +26,8 @@ Cambios de fondo respecto a run_testing_sweep:
 - DataProvider en vez de dataset.flatten_subject_data directo -- mismo
   BCIDataProviderAdapter que usa TrainingOrchestrator, agnóstico de cómo
   se llama "unidad" en el dominio.
-- Nombrado de partición vía "unit_{id:02d}" explícito (no depende de
-  ningún Schema real instanciado, testing no arma Schema -- pero preserva
-  el mismo formato de nombre que ya usan los Schemas within-unit, para
-  que WithinUnitMatcher pueda interpretarlo sin ambigüedad).
+- Partitions mirror the origin's: same names, and the unit of each one is
+  read from the origin's fold_metadata.json, never parsed from the name.
 """
 import copy
 import json
@@ -157,6 +155,13 @@ class TestingOrchestrator:
             database_session=self.model_source["database_session"], label=self.model_source["label"],
         )
 
+    def _origin_fold_metadata(self, origin_partition: str) -> Optional[dict]:
+        """fold_metadata.json of an origin partition, or None if it does not exist."""
+        metadata_path = self._origin_output_path() / origin_partition / "fold_metadata.json"
+        if not metadata_path.exists():
+            return None
+        return json.loads(metadata_path.read_text())
+
     def _origin_label_map(self, origin_partition: str) -> Optional[dict]:
         """Mapeo {clase original: índice} que usó el training de origen en
         esa partición -- inverso de fold_metadata.json["bin_to_class"]
@@ -166,13 +171,22 @@ class TestingOrchestrator:
         del modelo aunque al sujeto de test le falte alguna clase. None si
         el origen no lo dejó registrado (API vieja, o un LabelTransform sin
         bin_to_class)."""
-        metadata_path = self._origin_output_path() / origin_partition / "fold_metadata.json"
-        if not metadata_path.exists():
-            return None
-        bin_to_class = json.loads(metadata_path.read_text()).get("bin_to_class")
+        bin_to_class = (self._origin_fold_metadata(origin_partition) or {}).get("bin_to_class")
         if not bin_to_class:
             return None
         return {cls: int(idx) for idx, cls in bin_to_class.items()}
+
+    def _origin_unit(self, origin_partition: str) -> Any:
+        """Unit of an origin partition, read from its fold_metadata.json --
+        never parsed from the partition name."""
+        metadata = self._origin_fold_metadata(origin_partition) or {}
+        if "unit_id" not in metadata:
+            raise ValueError(
+                f"The fold_metadata.json of origin partition '{origin_partition}' in "
+                f"{self._origin_output_path()} is missing or has no 'unit_id', so its unit "
+                f"is unknown. Retrain the origin with the current code."
+            )
+        return metadata["unit_id"]
 
     def run(self) -> None:
         self.provider = self._setup_provider()
@@ -205,19 +219,19 @@ class TestingOrchestrator:
 
         resolver = TrainedModelResolver(PATHS.results_root, self.model_source)
         all_weights = list(resolver.resolve_weights())
-        matcher = MATCHER_REGISTRY["WithinUnitMatcher"]()
+        matcher = MATCHER_REGISTRY["OriginPartitionMatcher"]()
 
-        # Testing siempre evalúa todas las unidades del PROVIDER de test
-        # (no hay "units_to_test" acá -- el filtro real es "¿tiene esta
-        # unidad pesos entrenados emparejados?", resuelto vía resolver+matcher).
-        all_units = self.provider.list_units()
-        partition_to_unit = {f"unit_{u:02d}": u for u in all_units}
-
-        matches_by_partition: Dict[str, list] = {}
-        for partition in partition_to_unit:
-            matched = matcher.match(all_weights, partition)
-            if matched:
-                matches_by_partition[partition] = matched
+        # Evaluation mirrors the origin's partitions: each origin partition
+        # with weights is evaluated in a partition of the same name, on its
+        # unit (read from fold_metadata.json). Order follows the test
+        # provider; a unit the test provider does not have is skipped.
+        weights_by_partition = matcher.match(all_weights)
+        unit_of = {p: self._origin_unit(p) for p in weights_by_partition}
+        partition_to_unit = {
+            p: u for u in self.provider.list_units()
+            for p in weights_by_partition if unit_of[p] == u
+        }
+        matches_by_partition: Dict[str, list] = {p: weights_by_partition[p] for p in partition_to_unit}
 
         if not matches_by_partition:
             logger.info(
