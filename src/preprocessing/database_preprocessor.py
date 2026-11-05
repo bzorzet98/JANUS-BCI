@@ -68,6 +68,14 @@ def _now() -> str:
     return datetime.datetime.now().isoformat()
 
 
+def _partition_key(session: str, subject: int, context: str, run_id: str) -> str:
+    """Key of one preprocessing run in run_registry.csv, stage_metrics.csv
+    and the detail tables: `<session>/subject_XX/<context>/<run_id>`. The
+    session comes first, as in the folder layout (`<session>/subject_XX/`),
+    so two sessions of the same subject never share a key."""
+    return f"{session}/subject_{subject:02d}/{context}/{run_id}"
+
+
 def _diff_pipeline(old_pipeline: Optional[dict], new_pipeline: Optional[dict]) -> List[str]:
     """Compara dos `preprocessing_pipeline` (formato {'stages': [...]})
     stage por stage, identificando cada uno por `stage_name` para que el
@@ -200,7 +208,7 @@ class EEGDatabasePreprocessor:
                 subject_obj = self.dataset.get_subject(subject, session=session)
             except Exception as e:
                 logger.error("CRITICAL ERROR loading subject %s: %s", subject, e)
-                partition = f"subject_{subject:02d}/unknown/unknown"
+                partition = _partition_key(session, subject, "unknown", "unknown")
                 self.reporter.on_run_start(partition)
                 self._append_run_registry(
                     partition=partition,
@@ -218,7 +226,7 @@ class EEGDatabasePreprocessor:
             if subject_obj is None:
                 continue
             for context, run_id, raw_data in subject_obj.iter_all_runs():
-                partition = f"subject_{subject:02d}/{context}/{run_id}"
+                partition = _partition_key(session, subject, context, run_id)
                 if partition in self._done_partitions:
                     logger.info("Omitiendo %s (ya resuelto en run_registry.csv)", partition)
                     continue
@@ -228,7 +236,7 @@ class EEGDatabasePreprocessor:
         self.reporter.on_finish(self._build_summary())
 
     def _process_one_run(self, subject, session, context, run_id, raw_data) -> None:
-        partition = f"subject_{subject:02d}/{context}/{run_id}"
+        partition = _partition_key(session, subject, context, run_id)
         prefix = f"subject_{subject:02d}_{context}_{run_id}"
         ts_start = _now()
         status = "failed"
@@ -318,7 +326,7 @@ class EEGDatabasePreprocessor:
         sessions = getattr(self.dataset, "sessions", ["session_1"])
         contexts = getattr(self.dataset, "data_to_load", None) or self.dataset.get_data_available()
         return [
-            (subject, session, f"subject_{subject:02d}/{context}/run_1")
+            (subject, session, _partition_key(session, subject, context, "run_1"))
             for subject in subjects_list
             for session in sessions
             for context in contexts
