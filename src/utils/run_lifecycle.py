@@ -111,14 +111,6 @@ def diff_values(old: Any, new: Any, path: str = "identity") -> List[str]:
     return diffs
 
 
-# Temporary aliases for modules that still import the old names.
-# Removed in step B2.3.
-_append_csv_row = append_csv_row
-_drop_csv_rows = drop_csv_rows
-_clear_sweep_outputs = clear_sweep_outputs
-_diff_values = diff_values
-
-
 class RunLifecycleManager:
     """Reanudación/sobrescritura para un barrido cuyo output vive bajo
     `output_path`. No sabe nada del dominio (BCI, imágenes, etc.) ni del
